@@ -1,49 +1,40 @@
 import { Hono } from 'hono'
-import { authMiddleware, adminMiddleware } from '../middleware/auth'
+import { verifyJWT } from '../middleware/auth'
 
 type Bindings = { DB: D1Database }
 const notifications = new Hono<{ Bindings: Bindings }>()
 
-notifications.get('/', authMiddleware, async (c) => {
+notifications.get('/', async (c) => {
+  const auth = c.req.header('Authorization')
+  if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401)
   try {
-    const user = c.get('user')
+    const user = await verifyJWT(auth.slice(7))
     const { results } = await c.env.DB.prepare(
       `SELECT * FROM notifications WHERE (user_id = ? OR user_id IS NULL) ORDER BY created_at DESC LIMIT 30`
     ).bind(user.id).all()
-    const unread = await c.env.DB.prepare(
-      `SELECT COUNT(*) as count FROM notifications WHERE (user_id = ? OR user_id IS NULL) AND is_read = 0`
-    ).bind(user.id).first<any>()
-    return c.json({ notifications: results, unread_count: unread?.count || 0 })
+    return c.json({ notifications: results })
   } catch (e: any) { return c.json({ error: e.message }, 500) }
 })
 
-notifications.post('/:id/read', authMiddleware, async (c) => {
+notifications.post('/read-all', async (c) => {
+  const auth = c.req.header('Authorization')
+  if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401)
   try {
-    const user = c.get('user')
-    const id = c.req.param('id')
-    await c.env.DB.prepare(
-      `UPDATE notifications SET is_read = 1 WHERE id = ? AND (user_id = ? OR user_id IS NULL)`
-    ).bind(id, user.id).run()
+    const user = await verifyJWT(auth.slice(7))
+    await c.env.DB.prepare(`UPDATE notifications SET is_read=1 WHERE user_id=? OR user_id IS NULL`).bind(user.id).run()
     return c.json({ success: true })
   } catch (e: any) { return c.json({ error: e.message }, 500) }
 })
 
-notifications.post('/read-all', authMiddleware, async (c) => {
+notifications.post('/', async (c) => {
+  const auth = c.req.header('Authorization')
+  if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401)
   try {
-    const user = c.get('user')
-    await c.env.DB.prepare(
-      `UPDATE notifications SET is_read = 1 WHERE user_id = ? OR user_id IS NULL`
-    ).bind(user.id).run()
-    return c.json({ success: true })
-  } catch (e: any) { return c.json({ error: e.message }, 500) }
-})
-
-notifications.post('/', adminMiddleware, async (c) => {
-  try {
-    const { title, message, type, user_id, link } = await c.req.json()
-    await c.env.DB.prepare(
-      `INSERT INTO notifications (user_id, title, message, type, link) VALUES (?, ?, ?, ?, ?)`
-    ).bind(user_id || null, title, message, type || 'info', link || null).run()
+    const user = await verifyJWT(auth.slice(7))
+    if (user.role !== 'admin') return c.json({ error: 'Admin only' }, 403)
+    const { title, message, type, user_id } = await c.req.json()
+    await c.env.DB.prepare(`INSERT INTO notifications (user_id, title, message, type) VALUES (?,?,?,?)`)
+      .bind(user_id || null, title, message, type || 'info').run()
     return c.json({ success: true })
   } catch (e: any) { return c.json({ error: e.message }, 500) }
 })

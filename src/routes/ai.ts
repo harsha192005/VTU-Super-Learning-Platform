@@ -1,216 +1,277 @@
 import { Hono } from 'hono'
-import { authMiddleware } from '../middleware/auth'
+import { verifyJWT } from '../middleware/auth'
 
 type Bindings = { DB: D1Database; OPENAI_API_KEY?: string }
 const ai = new Hono<{ Bindings: Bindings }>()
 
-// VTU Knowledge base for AI responses
-const VTU_KNOWLEDGE: Record<string, string> = {
-  'data structures': 'Data Structures in VTU CSE Sem 3 covers: Arrays, Linked Lists (Singly, Doubly, Circular), Stacks, Queues, Trees (Binary, BST, AVL, B-Trees), Graphs (BFS, DFS), Sorting (Quick, Merge, Heap), Hashing.',
-  'operating systems': 'OS in VTU CSE Sem 4 covers: Process Management, CPU Scheduling (FCFS, SJF, RR, Priority), Memory Management (Paging, Segmentation, Virtual Memory), Deadlocks (Detection, Prevention, Avoidance), File Systems, I/O Management.',
-  'dbms': 'DBMS in VTU CSE Sem 3 covers: ER Model, Relational Model, SQL (DDL, DML, DCL), Normalization (1NF-BCNF), Transactions (ACID), Concurrency Control, Recovery, Indexing (B+ Trees, Hashing).',
-  'computer networks': 'CN in VTU CSE Sem 4 covers: OSI Model (7 layers), TCP/IP Suite, Data Link (Ethernet, CSMA/CD), Network Layer (IP, Routing - RIP, OSPF, BGP), Transport Layer (TCP, UDP), Application Layer (HTTP, FTP, DNS, SMTP).',
-  'machine learning': 'ML in VTU CSE Sem 6 covers: Supervised Learning (Linear Regression, Logistic Regression, Decision Trees, SVM, KNN), Unsupervised Learning (K-Means, Hierarchical Clustering), Neural Networks, Evaluation Metrics (Precision, Recall, F1, ROC).',
-  'algorithms': 'ADA in VTU CSE Sem 4 covers: Algorithm Analysis (Time/Space Complexity, Big-O), Divide & Conquer (Merge Sort, Quick Sort, Binary Search), Greedy (Huffman, Kruskal, Prim), Dynamic Programming (LCS, 0/1 Knapsack, Matrix Chain), Backtracking, Graph Algorithms.',
-  'compiler design': 'Compiler Design in VTU CSE Sem 6 covers: Phases of Compilation, Lexical Analysis (Regular Expressions, Automata), Syntax Analysis (CFG, Parsing - LL, LR), Semantic Analysis, Intermediate Code Generation, Code Optimization, Code Generation.',
-  'vtu': 'VTU (Visvesvaraya Technological University) is one of the largest technical universities in India, established in 1998, headquartered in Belagavi, Karnataka. It offers B.E., B.Tech, M.Tech, MBA, MCA, and Ph.D. programs across 200+ affiliated colleges.',
-  'cgpa': 'VTU CGPA Calculation: CGPA = Sum(Credit × Grade Points) / Sum(Credits). Grade Points: O=10, A+=9, A=8, B+=7, B=6, C=5, P=4, F=0. Minimum CGPA 5.0 required to pass semester.',
-  'placement': 'VTU Placement Tips: Master DSA fundamentals, practice on LeetCode/HackerRank, learn one full-stack technology, work on projects, prepare aptitude (arithmetic, logical, verbal), practice mock interviews. Top recruiters: TCS, Infosys, Wipro, Accenture, Cognizant, Amazon, Microsoft, Google.',
+// Simple rule-based AI fallback (no API key needed)
+function generateLocalAnswer(message: string, subjectContext: string): string {
+  const msg = message.toLowerCase()
+
+  const responses: Record<string, string> = {
+    'big o': `## Big O Notation
+
+Big O notation describes the **time/space complexity** of algorithms.
+
+| Notation | Name | Example |
+|----------|------|---------|
+| O(1) | Constant | Array access |
+| O(log n) | Logarithmic | Binary search |
+| O(n) | Linear | Linear search |
+| O(n log n) | Log-linear | Merge sort |
+| O(n²) | Quadratic | Bubble sort |
+| O(2ⁿ) | Exponential | Fibonacci recursive |
+
+**Key Rule:** Drop constants and lower-order terms. O(2n) → O(n)`,
+
+    'deadlock': `## Deadlock in Operating Systems
+
+A **deadlock** occurs when processes wait indefinitely for resources held by each other.
+
+### Four Necessary Conditions (Coffman Conditions):
+1. **Mutual Exclusion** – Resource held by one process at a time
+2. **Hold and Wait** – Process holds one resource while waiting for others
+3. **No Preemption** – Resources can't be forcibly taken
+4. **Circular Wait** – P1 waits for P2, P2 waits for P1
+
+### Prevention Methods:
+- **Banker's Algorithm** – Check safe state before allocation
+- **Resource Ordering** – Assign numbers to resources
+- **Preemption** – Force-take resources when needed`,
+
+    'quicksort': `## QuickSort Algorithm
+
+QuickSort uses **divide and conquer** with a pivot element.
+
+\`\`\`python
+def quicksort(arr):
+    if len(arr) <= 1:
+        return arr
+    pivot = arr[len(arr) // 2]
+    left  = [x for x in arr if x < pivot]
+    mid   = [x for x in arr if x == pivot]
+    right = [x for x in arr if x > pivot]
+    return quicksort(left) + mid + quicksort(right)
+\`\`\`
+
+### Complexity:
+- **Best/Average:** O(n log n)
+- **Worst:** O(n²) — when pivot is always min/max
+- **Space:** O(log n)`,
+
+    'linked list': `## Linked List
+
+A **linked list** is a linear data structure where elements (nodes) are connected via pointers.
+
+### Types:
+1. **Singly Linked** – Each node points to next
+2. **Doubly Linked** – Points to next AND previous
+3. **Circular** – Last node points back to first
+
+### Operations:
+| Operation | Time Complexity |
+|-----------|----------------|
+| Access | O(n) |
+| Search | O(n) |
+| Insert (head) | O(1) |
+| Delete (head) | O(1) |`,
+
+    'normalization': `## Database Normalization
+
+Normalization eliminates **data redundancy** and ensures **data integrity**.
+
+### Normal Forms:
+- **1NF** – Atomic values, no repeating groups
+- **2NF** – 1NF + No partial dependencies on composite key
+- **3NF** – 2NF + No transitive dependencies
+- **BCNF** – Every determinant is a candidate key
+
+### Example:
+\`Student(ID, Name, CourseID, CourseName)\`
+- CourseID → CourseName is transitive → **violates 3NF**
+- **Fix:** Split into Student(ID, Name, CourseID) + Course(CourseID, CourseName)`,
+
+    'tcp': `## TCP vs UDP
+
+| Feature | TCP | UDP |
+|---------|-----|-----|
+| Connection | Connection-oriented | Connectionless |
+| Reliability | Guaranteed delivery | No guarantee |
+| Order | In-order delivery | No ordering |
+| Speed | Slower | Faster |
+| Use case | HTTP, FTP, Email | Video streaming, DNS, Gaming |
+
+### TCP 3-Way Handshake:
+1. **SYN** – Client sends synchronize
+2. **SYN-ACK** – Server acknowledges
+3. **ACK** – Client confirms`,
+
+    'osi': `## OSI Model (7 Layers)
+
+| Layer | Name | Protocol/Device |
+|-------|------|-----------------|
+| 7 | Application | HTTP, FTP, SMTP |
+| 6 | Presentation | SSL, JPEG, MPEG |
+| 5 | Session | NetBIOS, RPC |
+| 4 | Transport | TCP, UDP |
+| 3 | Network | IP, ICMP, Router |
+| 2 | Data Link | MAC, Switch, Ethernet |
+| 1 | Physical | Cables, Hub, Bits |
+
+**Memory trick:** "**A**ll **P**eople **S**eem **T**o **N**eed **D**ata **P**rocessing"`,
+
+    'machine learning': `## Machine Learning Overview
+
+### Types:
+1. **Supervised Learning** – Labeled data (Classification, Regression)
+   - Examples: Linear Regression, SVM, Decision Trees, Neural Networks
+2. **Unsupervised Learning** – No labels (Clustering, Dimensionality Reduction)
+   - Examples: K-Means, PCA, Autoencoders
+3. **Reinforcement Learning** – Agent learns via rewards/penalties
+
+### Key Concepts:
+- **Overfitting** – Model memorizes training data (high variance)
+- **Underfitting** – Model too simple (high bias)
+- **Cross-validation** – Technique to evaluate model performance
+- **Gradient Descent** – Optimization algorithm to minimize loss`,
+
+    'exam': `## VTU Exam Preparation Tips 🎓
+
+### Strategy:
+1. **Start with syllabus** – Know exactly what's in scope
+2. **Previous year papers** – Solve last 5 years (most repeated questions)
+3. **Module-wise study** – Complete one module at a time
+4. **10-mark questions** – Practice writing detailed answers
+5. **Diagrams** – Always include relevant diagrams
+
+### VTU Pattern:
+- **Internal Marks:** 50 (2 CIAs + Assignments)
+- **External Marks:** 50 (Theory Exam)
+- **Passing:** 40% in each (Internal + External separately)
+
+### Time Management:
+- 3-hour paper: Spend max **20 min per 10-mark question**
+- Attempt all questions – partial marks are awarded`,
+
+    'sql': `## SQL Quick Reference
+
+\`\`\`sql
+-- SELECT with conditions
+SELECT * FROM students WHERE branch = 'CSE' ORDER BY name;
+
+-- JOIN tables
+SELECT s.name, c.title 
+FROM students s JOIN courses c ON s.course_id = c.id;
+
+-- GROUP BY with aggregate
+SELECT branch, COUNT(*) as total, AVG(marks) as avg_marks
+FROM students GROUP BY branch HAVING AVG(marks) > 60;
+
+-- Subquery
+SELECT name FROM students 
+WHERE marks > (SELECT AVG(marks) FROM students);
+\`\`\`
+
+### Key Commands:
+- **DDL:** CREATE, ALTER, DROP, TRUNCATE
+- **DML:** SELECT, INSERT, UPDATE, DELETE
+- **DCL:** GRANT, REVOKE`,
+  }
+
+  for (const [key, answer] of Object.entries(responses)) {
+    if (msg.includes(key)) return answer
+  }
+
+  // Generic response
+  return `## Answer to: "${message}"
+
+${subjectContext ? `*Context: ${subjectContext}*\n\n` : ''}I'm the VTU AI Assistant! Here are some tips for this topic:
+
+1. **Check your VTU syllabus** for this subject to understand what topics are in scope
+2. **Refer to the resources** section for official notes and textbooks
+3. **Practice previous year papers** available in the question papers section
+4. **Use the quiz system** to test your understanding
+
+### Common Study Resources:
+- Module-wise notes in the Resources section
+- VTU question papers (last 5 years)
+- Lab manuals for practical subjects
+
+**Tip:** Be more specific in your question for a detailed answer. For example:
+- "Explain quicksort algorithm with example"
+- "What is deadlock in OS and how to prevent it?"
+- "Explain normalization with example"
+
+Feel free to ask about: Data Structures, OS, DBMS, Networks, Machine Learning, Algorithms, or any VTU topic!`
 }
 
-function getRelevantContext(message: string): string {
-  const lower = message.toLowerCase()
-  const relevant: string[] = []
-  for (const [key, value] of Object.entries(VTU_KNOWLEDGE)) {
-    if (lower.includes(key) || key.split(' ').some(word => lower.includes(word))) {
-      relevant.push(value)
-    }
-  }
-  return relevant.join('\n\n')
-}
-
-function generateSmartResponse(message: string, subjectName?: string): string {
-  const lower = message.toLowerCase()
-  const context = getRelevantContext(message)
-  
-  // Greeting
-  if (/^(hi|hello|hey|greetings)/i.test(message.trim())) {
-    return `Hello! 👋 I'm your VTU AI Study Assistant. I can help you with:\n\n📚 **Subject Explanations** - Ask about any VTU topic\n🧪 **Concept Clarification** - Get detailed explanations\n📝 **Exam Preparation** - Important questions & tips\n💼 **Placement Guidance** - Interview prep & resources\n\nWhat would you like to learn today?`
-  }
-  
-  // Study tips
-  if (lower.includes('study tip') || lower.includes('how to study') || lower.includes('preparation tip')) {
-    return `## 📚 VTU Study Tips\n\n**1. Understand the Syllabus**\nStart by reading the complete VTU syllabus for each subject.\n\n**2. Module-wise Approach**\nVTU divides each subject into 5 modules. Study one module completely before moving to the next.\n\n**3. Use Previous Year Papers**\nSolve last 10 years of VTU question papers. Questions repeat with ~60% probability!\n\n**4. Important Questions**\nFocus on questions that appear in multiple years - these are HIGH priority.\n\n**5. Lab Preparation**\nPractice all lab programs until you can write them without reference.\n\n**6. Internal Assessment**\nIA marks = 40% of total. Don't neglect internals!\n\n**7. Active Recall**\nDon't just read - write key formulas and concepts from memory.\n\n${subjectName ? `\n**Specifically for ${subjectName}:** Focus on numerical problems and derivations for theory exams.` : ''}`
-  }
-  
-  // Explain concept
-  if (lower.includes('explain') || lower.includes('what is') || lower.includes('define')) {
-    if (context) {
-      return `## 📖 Explanation\n\n${context}\n\n---\n💡 **Tip:** For deeper understanding, check the uploaded notes and textbooks in the Resources section. Want me to elaborate on any specific aspect?`
-    }
-  }
-  
-  // Important questions
-  if (lower.includes('important question') || lower.includes('exam question') || lower.includes('viva question')) {
-    const subject = subjectName || 'your subject'
-    return `## 📝 Important Questions for ${subject}\n\n**Module 1 (High Priority):**\n• Define and explain the fundamental concepts with examples\n• Compare and contrast the key techniques\n• Explain the algorithm/process with a diagram\n\n**Module 2-3 (Medium Priority):**\n• Numerical/problem-solving questions\n• Short notes on key topics\n• Differences between concepts\n\n**Module 4-5 (High Priority):**\n• Application-based questions\n• Case studies\n• Recent developments\n\n📌 **VTU Pattern:** 5 questions, answer any 5 from 8. Each module gets 2 questions.\n\n*Check the Question Papers section for actual VTU exam papers!*`
-  }
-  
-  // Placement questions
-  if (lower.includes('placement') || lower.includes('interview') || lower.includes('job')) {
-    return `## 💼 Placement Preparation Guide\n\n**Technical Round:**\n✅ DSA - Arrays, Strings, Linked Lists, Trees, Graphs, DP\n✅ CS Fundamentals - OS, DBMS, CN, OOP\n✅ Coding Practice - LeetCode (Easy/Medium), HackerRank\n\n**Aptitude Round:**\n✅ Quantitative - Percentages, Time-Distance, Profit-Loss\n✅ Logical Reasoning - Patterns, Syllogisms, Blood Relations\n✅ Verbal Ability - Reading Comprehension, Vocabulary\n\n**HR Round:**\n✅ Tell me about yourself (2-minute pitch)\n✅ Why this company? (Research company values)\n✅ Strengths and weaknesses (be honest & positive)\n✅ Projects and internships\n\n**Top Companies visiting VTU campuses:**\nTCS, Infosys, Wipro, Accenture, Cognizant, Capgemini, HCL, Amazon, Microsoft (for Tier-1 colleges)\n\n*Visit the Placement Module for company-wise preparation guides!*`
-  }
-  
-  // Default with context
-  if (context) {
-    return `## 📚 ${subjectName ? subjectName + ' - ' : ''}Study Notes\n\n${context}\n\n---\n*This information is based on the VTU curriculum. For detailed notes and previous year papers, check the Resources section.*\n\nDo you have any specific questions about this topic?`
-  }
-  
-  // General fallback
-  return `I'm your VTU Study Assistant! 🤖\n\nI can help you with:\n\n📖 **Explaining concepts** - "Explain binary trees"\n📝 **Study tips** - "How to study for VTU exams"\n💡 **Important questions** - "Important questions for DBMS"\n💼 **Placement prep** - "How to prepare for TCS placement"\n🔬 **Subject-specific doubts** - Ask about any VTU subject\n\n**Currently I have knowledge about:**\n${Object.keys(VTU_KNOWLEDGE).map(k => `• ${k.charAt(0).toUpperCase() + k.slice(1)}`).join('\n')}\n\nWhat would you like to know?`
-}
-
-ai.post('/chat', authMiddleware, async (c) => {
+ai.post('/chat', async (c) => {
+  const auth = c.req.header('Authorization')
+  if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401)
   try {
-    const user = c.get('user')
-    const { message, session_id, subject_id } = await c.req.json()
-    if (!message?.trim()) return c.json({ error: 'Message cannot be empty' }, 400)
-    
-    let subjectName = ''
+    const user = await verifyJWT(auth.slice(7))
+    const { message, subject_id, history } = await c.req.json()
+    if (!message) return c.json({ error: 'Message required' }, 400)
+
+    let subjectContext = ''
     if (subject_id) {
-      const subject = await c.env.DB.prepare(`SELECT name FROM subjects WHERE id = ?`).bind(subject_id).first<any>()
-      subjectName = subject?.name || ''
+      const subject = await c.env.DB.prepare(`SELECT name, description FROM subjects WHERE id = ?`).bind(subject_id).first<any>()
+      if (subject) subjectContext = `${subject.name}: ${subject.description || ''}`
     }
-    
-    // Try OpenAI if key is available
-    let aiResponse = ''
+
+    // Try OpenAI if key available
     if (c.env.OPENAI_API_KEY) {
       try {
-        const context = getRelevantContext(message)
-        const systemPrompt = `You are a specialized VTU (Visvesvaraya Technological University) Study Assistant AI. You help engineering students with their studies, exam preparation, and placement guidance. 
-        
-Current student: ${user.name}, Branch: ${user.branch || 'Engineering'}, Subject context: ${subjectName || 'General'}.
+        const messages: any[] = [
+          {
+            role: 'system',
+            content: `You are an expert VTU (Visvesvaraya Technological University) academic assistant. Help students with their engineering subjects. ${subjectContext ? `Current subject context: ${subjectContext}` : ''} Provide clear, structured answers with examples. Format responses with markdown headings and code blocks where appropriate.`
+          },
+          ...(history || []).slice(-6),
+          { role: 'user', content: message }
+        ]
 
-VTU Context: ${context || 'General VTU engineering curriculum'}
-
-Be concise, structured, and use markdown formatting. Focus on practical exam-oriented explanations.`
-        
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${c.env.OPENAI_API_KEY}` },
-          body: JSON.stringify({
-            model: 'gpt-3.5-turbo',
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: message }
-            ],
-            max_tokens: 800,
-            temperature: 0.7
-          })
+          body: JSON.stringify({ model: 'gpt-3.5-turbo', messages, max_tokens: 800, temperature: 0.7 })
         })
+
         if (response.ok) {
-          const data = await response.json() as any
-          aiResponse = data.choices[0].message.content
+          const data: any = await response.json()
+          const reply = data.choices?.[0]?.message?.content || ''
+          if (reply) {
+            // Award points for AI usage
+            await c.env.DB.prepare(`UPDATE users SET points = points + 5 WHERE id = ?`).bind(user.id).run()
+            return c.json({ reply, source: 'openai' })
+          }
         }
-      } catch {}
+      } catch(e) {}
     }
-    
-    // Fallback to smart local response
-    if (!aiResponse) {
-      aiResponse = generateSmartResponse(message, subjectName)
-    }
-    
-    // Save or update session
-    let sessionId = session_id
-    if (sessionId) {
-      const session = await c.env.DB.prepare(`SELECT id, messages FROM ai_sessions WHERE id = ? AND user_id = ?`).bind(sessionId, user.id).first<any>()
-      if (session) {
-        const messages = JSON.parse(session.messages || '[]')
-        messages.push({ role: 'user', content: message, timestamp: new Date().toISOString() })
-        messages.push({ role: 'assistant', content: aiResponse, timestamp: new Date().toISOString() })
-        await c.env.DB.prepare(`UPDATE ai_sessions SET messages = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(JSON.stringify(messages), sessionId).run()
-      }
-    } else {
-      const title = message.slice(0, 50) + (message.length > 50 ? '...' : '')
-      const messages = [
-        { role: 'user', content: message, timestamp: new Date().toISOString() },
-        { role: 'assistant', content: aiResponse, timestamp: new Date().toISOString() }
-      ]
-      const newSession = await c.env.DB.prepare(
-        `INSERT INTO ai_sessions (user_id, title, subject_id, messages) VALUES (?, ?, ?, ?) RETURNING id`
-      ).bind(user.id, title, subject_id || null, JSON.stringify(messages)).first<any>()
-      sessionId = newSession?.id
-    }
-    
-    // Award points for using AI
-    await c.env.DB.prepare(`UPDATE users SET points = points + 3 WHERE id = ?`).bind(user.id).run()
-    
-    return c.json({ success: true, response: aiResponse, session_id: sessionId })
-  } catch (e: any) { return c.json({ error: e.message || 'AI request failed' }, 500) }
-})
 
-ai.get('/sessions', authMiddleware, async (c) => {
-  try {
-    const user = c.get('user')
-    const { results } = await c.env.DB.prepare(
-      `SELECT id, title, subject_id, created_at, updated_at FROM ai_sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 20`
-    ).bind(user.id).all()
-    return c.json({ sessions: results })
+    // Fallback to local AI
+    const reply = generateLocalAnswer(message, subjectContext)
+    await c.env.DB.prepare(`UPDATE users SET points = points + 2 WHERE id = ?`).bind(user.id).run()
+    return c.json({ reply, source: 'local' })
   } catch (e: any) { return c.json({ error: e.message }, 500) }
 })
 
-ai.get('/sessions/:id', authMiddleware, async (c) => {
-  try {
-    const user = c.get('user')
-    const id = c.req.param('id')
-    const session = await c.env.DB.prepare(`SELECT * FROM ai_sessions WHERE id = ? AND user_id = ?`).bind(id, user.id).first<any>()
-    if (!session) return c.json({ error: 'Session not found' }, 404)
-    session.messages = JSON.parse(session.messages || '[]')
-    return c.json({ session })
-  } catch (e: any) { return c.json({ error: e.message }, 500) }
-})
-
-ai.delete('/sessions/:id', authMiddleware, async (c) => {
-  try {
-    const user = c.get('user')
-    const id = c.req.param('id')
-    await c.env.DB.prepare(`DELETE FROM ai_sessions WHERE id = ? AND user_id = ?`).bind(id, user.id).run()
-    return c.json({ success: true })
-  } catch (e: any) { return c.json({ error: e.message }, 500) }
-})
-
-ai.post('/summarize', authMiddleware, async (c) => {
+ai.post('/summarize', async (c) => {
+  const auth = c.req.header('Authorization')
+  if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401)
   try {
     const { text, subject } = await c.req.json()
-    if (!text) return c.json({ error: 'Text is required' }, 400)
-    const wordCount = text.split(' ').length
-    const sentences = text.split(/[.!?]+/).filter((s: string) => s.trim().length > 20)
-    const keyPoints = sentences.slice(0, Math.min(5, Math.ceil(sentences.length * 0.3)))
-    const summary = {
-      overview: `This content covers approximately ${wordCount} words about ${subject || 'the subject'}.`,
-      key_points: keyPoints.map((s: string) => s.trim()),
-      important_terms: text.match(/\b[A-Z][a-z]+ [A-Z][a-z]+|\b[A-Z]{2,}/g)?.slice(0, 10) || [],
-      study_tip: 'Focus on understanding the key concepts rather than memorizing. Practice with examples.'
-    }
-    return c.json({ summary })
-  } catch (e: any) { return c.json({ error: e.message }, 500) }
-})
+    if (!text) return c.json({ error: 'Text required' }, 400)
+    const summary = `## Summary
 
-ai.post('/generate-questions', authMiddleware, async (c) => {
-  try {
-    const { subject, topic, difficulty = 'medium', count = 5 } = await c.req.json()
-    const questionTemplates = [
-      `Define ${topic} and explain its significance in ${subject}.`,
-      `Explain the working of ${topic} with a suitable example.`,
-      `Compare and contrast the key aspects of ${topic}.`,
-      `What are the advantages and disadvantages of ${topic}?`,
-      `With a neat diagram, explain the architecture/structure of ${topic}.`,
-      `Derive the time complexity of ${topic} algorithm.`,
-      `List and explain the applications of ${topic} in real-world scenarios.`,
-      `Write an algorithm for ${topic} and trace it with an example.`,
-    ]
-    const selected = questionTemplates.slice(0, Math.min(count, questionTemplates.length))
-    return c.json({ questions: selected, subject, topic, difficulty })
+**Subject:** ${subject || 'General'}
+
+### Key Points:
+${text.split('.').filter((s: string) => s.trim().length > 20).slice(0, 5).map((s: string) => `- ${s.trim()}`).join('\n')}
+
+### Important Terms:
+Based on the content, focus on understanding the core concepts and their applications in VTU exams.`
+    return c.json({ summary })
   } catch (e: any) { return c.json({ error: e.message }, 500) }
 })
 

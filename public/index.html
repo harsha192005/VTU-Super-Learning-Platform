@@ -7,725 +7,744 @@
   <meta name="description" content="AI-powered VTU learning platform with quizzes, resources, placement prep, and more">
   <meta name="theme-color" content="#6366f1">
   <link rel="manifest" href="/manifest.json">
-  <link rel="icon" href="/icons/icon-192.png">
-  <!-- Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <!-- Icons -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.0/css/all.min.css">
-  <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Marked.js for markdown -->
   <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
-  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script>
     tailwind.config = {
       darkMode: ['attribute', '[data-theme="dark"]'],
       theme: {
         extend: {
-          fontFamily: { sans: ['Inter', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+          fontFamily: { sans: ['Inter','sans-serif'], mono: ['JetBrains Mono','monospace'] },
           colors: {
             primary: { 50:'#eef2ff',100:'#e0e7ff',200:'#c7d2fe',300:'#a5b4fc',400:'#818cf8',500:'#6366f1',600:'#4f46e5',700:'#4338ca',800:'#3730a3',900:'#312e81' },
-            dark: { 900:'#0a0a0f',800:'#111117',700:'#18181f',600:'#1e1e28',500:'#252530',400:'#2d2d3a',300:'#3a3a4a' }
-          }
+            dark:    { 900:'#0a0a0f',800:'#111117',700:'#18181f',600:'#1e1e28',500:'#252530',400:'#2d2d3a',300:'#3a3a4a' }
+          },
+          animation: { 'fade-in':'fadeIn .3s ease','slide-up':'slideUp .3s ease','pulse-slow':'pulse 3s infinite' }
         }
       }
     }
   </script>
   <style>
-    * { box-sizing: border-box; }
-    body { font-family: 'Inter', sans-serif; transition: background 0.3s, color 0.3s; }
-    [data-theme="dark"] body { background: #0a0a0f; color: #e2e8f0; }
-    [data-theme="light"] body { background: #f8fafc; color: #1e293b; }
-
-    /* Scrollbar */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #4f46e5; border-radius: 3px; }
-
-    /* Glass */
-    .glass { backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
-    [data-theme="dark"] .glass { background: rgba(17,17,23,0.8); border: 1px solid rgba(255,255,255,0.06); }
-    [data-theme="light"] .glass { background: rgba(255,255,255,0.85); border: 1px solid rgba(0,0,0,0.1); }
-
-    /* Cards */
-    [data-theme="dark"] .card { background: #111117; border: 1px solid #1e1e28; }
-    [data-theme="light"] .card { background: #fff; border: 1px solid #e2e8f0; }
-    .card { border-radius: 16px; transition: all 0.2s; }
-    .card:hover { border-color: #4f46e5; box-shadow: 0 0 20px rgba(99,102,241,0.15); }
-
-    /* Gradient text */
-    .gradient-text { background: linear-gradient(135deg, #6366f1, #8b5cf6, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-
-    /* Glow button */
-    .btn-primary { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; border: none; border-radius: 10px; padding: 10px 20px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 25px rgba(99,102,241,0.4); }
-    .btn-secondary { background: transparent; border: 1px solid #4f46e5; color: #818cf8; border-radius: 10px; padding: 10px 20px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-    .btn-secondary:hover { background: rgba(79,70,229,0.1); }
-    .btn-danger { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; border-radius: 10px; padding: 8px 16px; font-weight: 600; cursor: pointer; }
-    .btn-success { background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; border-radius: 10px; padding: 8px 16px; font-weight: 600; cursor: pointer; }
-
-    /* Sidebar */
-    #sidebar { width: 260px; min-height: 100vh; transition: transform 0.3s; }
-    [data-theme="dark"] #sidebar { background: #111117; border-right: 1px solid #1e1e28; }
-    [data-theme="light"] #sidebar { background: #fff; border-right: 1px solid #e2e8f0; }
-    .nav-item { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-radius: 10px; cursor: pointer; transition: all 0.2s; font-weight: 500; margin: 2px 8px; }
-    [data-theme="dark"] .nav-item { color: #94a3b8; }
-    [data-theme="light"] .nav-item { color: #64748b; }
-    .nav-item:hover, .nav-item.active { background: rgba(99,102,241,0.15); color: #818cf8; }
-    .nav-item.active { color: #6366f1; }
-
-    /* Input */
-    .input-field { width: 100%; padding: 10px 14px; border-radius: 10px; font-size: 14px; transition: all 0.2s; outline: none; }
-    [data-theme="dark"] .input-field { background: #1e1e28; border: 1px solid #2d2d3a; color: #e2e8f0; }
-    [data-theme="light"] .input-field { background: #f8fafc; border: 1px solid #e2e8f0; color: #1e293b; }
-    .input-field:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
-
-    /* Select */
-    [data-theme="dark"] select { background: #1e1e28; border: 1px solid #2d2d3a; color: #e2e8f0; }
-    [data-theme="light"] select { background: #f8fafc; border: 1px solid #e2e8f0; color: #1e293b; }
-
-    /* Badge */
-    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-    .badge-primary { background: rgba(99,102,241,0.15); color: #818cf8; }
-    .badge-success { background: rgba(16,185,129,0.15); color: #10b981; }
-    .badge-warning { background: rgba(245,158,11,0.15); color: #f59e0b; }
-    .badge-danger { background: rgba(239,68,68,0.15); color: #ef4444; }
-    .badge-purple { background: rgba(139,92,246,0.15); color: #8b5cf6; }
-
-    /* Progress bar */
-    .progress-bar { background: #1e1e28; border-radius: 999px; overflow: hidden; height: 8px; }
-    .progress-fill { background: linear-gradient(90deg, #6366f1, #8b5cf6); border-radius: 999px; transition: width 0.8s ease; height: 100%; }
-
-    /* Page transitions */
-    .page { display: none; animation: fadeIn 0.3s ease; }
-    .page.active { display: block; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
-    /* Modal */
-    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 1000; display: none; align-items: center; justify-content: center; }
-    .modal-overlay.active { display: flex; }
-    [data-theme="dark"] .modal { background: #111117; border: 1px solid #2d2d3a; }
-    [data-theme="light"] .modal { background: #fff; border: 1px solid #e2e8f0; }
-    .modal { border-radius: 20px; padding: 28px; max-width: 560px; width: 90%; max-height: 90vh; overflow-y: auto; }
-
-    /* Toast */
-    #toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
-    .toast { padding: 14px 20px; border-radius: 12px; font-weight: 500; font-size: 14px; min-width: 280px; display: flex; align-items: center; gap: 10px; animation: slideIn 0.3s ease; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
-    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-    .toast-success { background: linear-gradient(135deg, #10b981, #059669); color: white; }
-    .toast-error { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; }
-    .toast-info { background: linear-gradient(135deg, #6366f1, #4f46e5); color: white; }
-    .toast-warning { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; }
-
-    /* Quiz timer */
-    .timer-critical { color: #ef4444; animation: pulse 1s infinite; }
-    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
-
-    /* Markdown */
-    .markdown h1,.markdown h2,.markdown h3 { font-weight: 700; margin: 12px 0 8px; color: #818cf8; }
-    .markdown h2 { font-size: 1.1em; }
-    .markdown h3 { font-size: 1em; }
-    .markdown p { margin: 8px 0; line-height: 1.7; }
-    .markdown ul,.markdown ol { padding-left: 20px; margin: 8px 0; }
-    .markdown li { margin: 4px 0; }
-    .markdown code { background: rgba(99,102,241,0.15); padding: 2px 6px; border-radius: 4px; font-family: 'JetBrains Mono'; font-size: 0.9em; color: #a5b4fc; }
-    .markdown pre { background: #1e1e28; padding: 16px; border-radius: 10px; overflow-x: auto; }
-    .markdown strong { color: #c7d2fe; font-weight: 600; }
-    .markdown hr { border-color: #2d2d3a; margin: 12px 0; }
-
-    /* Stat card */
-    .stat-card { border-radius: 16px; padding: 20px; background: linear-gradient(135deg, var(--from), var(--to)); color: white; }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-      #sidebar { position: fixed; z-index: 50; transform: translateX(-100%); }
-      #sidebar.open { transform: translateX(0); }
-      #main-content { margin-left: 0 !important; }
+    *{box-sizing:border-box}
+    body{font-family:'Inter',sans-serif;transition:background .3s,color .3s;margin:0}
+    [data-theme="dark"]  body{background:#0a0a0f;color:#e2e8f0}
+    [data-theme="light"] body{background:#f1f5f9;color:#1e293b}
+    ::-webkit-scrollbar{width:6px;height:6px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:#4f46e5;border-radius:3px}
+    .glass{backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+    [data-theme="dark"]  .glass{background:rgba(17,17,23,.85);border:1px solid rgba(255,255,255,.07)}
+    [data-theme="light"] .glass{background:rgba(255,255,255,.9);border:1px solid rgba(0,0,0,.1)}
+    .card{border-radius:16px;transition:transform .2s,box-shadow .2s}
+    [data-theme="dark"]  .card{background:#111117;border:1px solid rgba(255,255,255,.07)}
+    [data-theme="light"] .card{background:#fff;border:1px solid rgba(0,0,0,.08);box-shadow:0 1px 8px rgba(0,0,0,.06)}
+    .card:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(99,102,241,.18)}
+    .btn-primary{background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:none;padding:.6rem 1.4rem;border-radius:10px;font-weight:600;cursor:pointer;transition:all .2s;font-size:.9rem}
+    .btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(99,102,241,.45)}
+    .btn-secondary{background:transparent;border:1px solid #6366f1;color:#818cf8;padding:.55rem 1.3rem;border-radius:10px;font-weight:500;cursor:pointer;transition:all .2s;font-size:.9rem}
+    .btn-secondary:hover{background:#6366f1;color:#fff}
+    .btn-danger{background:#ef4444;color:#fff;border:none;padding:.55rem 1.2rem;border-radius:8px;font-weight:500;cursor:pointer}
+    .btn-danger:hover{background:#dc2626}
+    .input-field{width:100%;padding:.7rem 1rem;border-radius:10px;font-size:.9rem;outline:none;transition:border .2s}
+    [data-theme="dark"]  .input-field{background:#18181f;border:1px solid rgba(255,255,255,.1);color:#e2e8f0}
+    [data-theme="light"] .input-field{background:#f8fafc;border:1px solid rgba(0,0,0,.15);color:#1e293b}
+    .input-field:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.15)}
+    .sidebar{width:260px;min-height:100vh;position:fixed;left:0;top:0;z-index:40;transition:transform .3s}
+    [data-theme="dark"]  .sidebar{background:#0d0d14;border-right:1px solid rgba(255,255,255,.06)}
+    [data-theme="light"] .sidebar{background:#fff;border-right:1px solid rgba(0,0,0,.08)}
+    .sidebar.collapsed{transform:translateX(-260px)}
+    .main-content{margin-left:260px;transition:margin .3s;min-height:100vh;padding:24px}
+    .main-content.expanded{margin-left:0}
+    .nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:10px;cursor:pointer;transition:all .2s;margin:2px 8px;font-size:.88rem;font-weight:500}
+    [data-theme="dark"]  .nav-item{color:#94a3b8}
+    [data-theme="light"] .nav-item{color:#64748b}
+    .nav-item:hover,.nav-item.active{background:linear-gradient(135deg,rgba(99,102,241,.2),rgba(79,70,229,.1));color:#818cf8}
+    .nav-item.active{color:#6366f1;font-weight:600}
+    .page{display:none;animation:fadeIn .3s ease}
+    .page.active{display:block}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+    @keyframes slideUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+    .badge-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:.75rem;font-weight:600}
+    .badge-green{background:rgba(34,197,94,.15);color:#22c55e}
+    .badge-blue{background:rgba(59,130,246,.15);color:#3b82f6}
+    .badge-purple{background:rgba(99,102,241,.15);color:#818cf8}
+    .badge-yellow{background:rgba(234,179,8,.15);color:#eab308}
+    .badge-red{background:rgba(239,68,68,.15);color:#ef4444}
+    .stat-card{border-radius:14px;padding:20px;position:relative;overflow:hidden}
+    [data-theme="dark"]  .stat-card{background:#111117;border:1px solid rgba(255,255,255,.07)}
+    [data-theme="light"] .stat-card{background:#fff;border:1px solid rgba(0,0,0,.08)}
+    .progress-bar{height:6px;border-radius:3px;background:rgba(99,102,241,.15);overflow:hidden}
+    .progress-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,#6366f1,#818cf8);transition:width .5s ease}
+    .topbar{position:sticky;top:0;z-index:30;padding:12px 24px;display:flex;align-items:center;justify-content:space-between}
+    [data-theme="dark"]  .topbar{background:rgba(10,10,15,.92);border-bottom:1px solid rgba(255,255,255,.06)}
+    [data-theme="light"] .topbar{background:rgba(241,245,249,.92);border-bottom:1px solid rgba(0,0,0,.08)}
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px)}
+    .modal{border-radius:20px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;padding:28px}
+    [data-theme="dark"]  .modal{background:#111117;border:1px solid rgba(255,255,255,.1)}
+    [data-theme="light"] .modal{background:#fff;border:1px solid rgba(0,0,0,.1)}
+    .tab-btn{padding:8px 18px;border-radius:8px;cursor:pointer;font-size:.88rem;font-weight:500;border:none;transition:all .2s}
+    [data-theme="dark"]  .tab-btn{background:transparent;color:#64748b}
+    [data-theme="light"] .tab-btn{background:transparent;color:#94a3b8}
+    .tab-btn.active{background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff}
+    .quiz-option{padding:14px 18px;border-radius:12px;cursor:pointer;transition:all .2s;border:2px solid transparent;margin-bottom:10px}
+    [data-theme="dark"]  .quiz-option{background:#18181f;color:#e2e8f0}
+    [data-theme="light"] .quiz-option{background:#f8fafc;color:#1e293b}
+    .quiz-option:hover{border-color:#6366f1;background:rgba(99,102,241,.08)}
+    .quiz-option.selected{border-color:#6366f1;background:rgba(99,102,241,.15)}
+    .quiz-option.correct{border-color:#22c55e;background:rgba(34,197,94,.12)}
+    .quiz-option.wrong{border-color:#ef4444;background:rgba(239,68,68,.12)}
+    .chat-bubble-user{background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border-radius:18px 18px 4px 18px;padding:12px 16px;max-width:78%;margin-left:auto}
+    .chat-bubble-ai{border-radius:18px 18px 18px 4px;padding:12px 16px;max-width:82%}
+    [data-theme="dark"]  .chat-bubble-ai{background:#1e1e28;color:#e2e8f0}
+    [data-theme="light"] .chat-bubble-ai{background:#e8eef8;color:#1e293b}
+    .notification-item{padding:14px 16px;border-radius:12px;margin-bottom:8px;border-left:3px solid}
+    [data-theme="dark"]  .notification-item{background:#18181f}
+    [data-theme="light"] .notification-item{background:#f8fafc}
+    .leaderboard-row{display:flex;align-items:center;gap:14px;padding:12px 16px;border-radius:12px;margin-bottom:8px}
+    [data-theme="dark"]  .leaderboard-row{background:#18181f}
+    [data-theme="light"] .leaderboard-row{background:#f8fafc}
+    .resource-card{border-radius:14px;padding:18px;cursor:pointer;transition:all .2s;position:relative}
+    [data-theme="dark"]  .resource-card{background:#18181f;border:1px solid rgba(255,255,255,.06)}
+    [data-theme="light"] .resource-card{background:#f8fafc;border:1px solid rgba(0,0,0,.07)}
+    .resource-card:hover{border-color:#6366f1;transform:translateY(-2px)}
+    .landing-hero{min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(99,102,241,.2),transparent)}
+    .feature-card{border-radius:20px;padding:28px;transition:all .3s}
+    [data-theme="dark"]  .feature-card{background:#111117;border:1px solid rgba(255,255,255,.07)}
+    [data-theme="light"] .feature-card{background:#fff;border:1px solid rgba(0,0,0,.08);box-shadow:0 4px 24px rgba(0,0,0,.06)}
+    .feature-card:hover{transform:translateY(-4px);box-shadow:0 16px 40px rgba(99,102,241,.2)}
+    .gradient-text{background:linear-gradient(135deg,#818cf8,#6366f1,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .glow{box-shadow:0 0 30px rgba(99,102,241,.3)}
+    .scrollable{overflow-y:auto;max-height:calc(100vh - 180px)}
+    .toast{position:fixed;bottom:24px;right:24px;z-index:9999;min-width:280px;padding:14px 20px;border-radius:14px;font-weight:500;animation:slideUp .3s ease;display:flex;align-items:center;gap:10px}
+    .toast-success{background:#166534;color:#bbf7d0;border:1px solid #22c55e}
+    .toast-error{background:#7f1d1d;color:#fecaca;border:1px solid #ef4444}
+    .toast-info{background:#1e3a5f;color:#bfdbfe;border:1px solid #3b82f6}
+    [data-theme="light"] .toast-success{background:#dcfce7;color:#166534}
+    [data-theme="light"] .toast-error{background:#fee2e2;color:#7f1d1d}
+    [data-theme="light"] .toast-info{background:#dbeafe;color:#1e3a5f}
+    @media(max-width:768px){
+      .sidebar{transform:translateX(-260px)}
+      .sidebar.open{transform:translateX(0)}
+      .main-content{margin-left:0!important}
     }
-
-    /* Loading spinner */
-    .spinner { width: 32px; height: 32px; border: 3px solid rgba(99,102,241,0.2); border-top-color: #6366f1; border-radius: 50%; animation: spin 0.8s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* Animate number */
-    .animate-count { transition: all 1s ease; }
-
-    /* VTU brand colors for branches */
-    .branch-cse { border-left: 4px solid #6366f1; }
-    .branch-ece { border-left: 4px solid #06b6d4; }
-    .branch-me  { border-left: 4px solid #f59e0b; }
-    .branch-cv  { border-left: 4px solid #10b981; }
-    .branch-ee  { border-left: 4px solid #ef4444; }
-
-    /* Leaderboard */
-    .rank-1 { background: linear-gradient(135deg, rgba(251,191,36,0.15), rgba(245,158,11,0.1)); border: 1px solid rgba(251,191,36,0.3); }
-    .rank-2 { background: linear-gradient(135deg, rgba(148,163,184,0.15), rgba(100,116,139,0.1)); border: 1px solid rgba(148,163,184,0.3); }
-    .rank-3 { background: linear-gradient(135deg, rgba(180,83,9,0.15), rgba(161,72,7,0.1)); border: 1px solid rgba(180,83,9,0.3); }
-
-    /* Sidebar overlay for mobile */
-    #sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 40; }
-    #sidebar-overlay.active { display: block; }
-
-    /* Notification dot */
-    .notif-dot { position: absolute; top: -4px; right: -4px; width: 18px; height: 18px; background: #ef4444; border-radius: 50%; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; color: white; }
-
-    /* Quiz option */
-    .quiz-option { border-radius: 12px; padding: 14px 18px; cursor: pointer; transition: all 0.2s; }
-    [data-theme="dark"] .quiz-option { background: #1e1e28; border: 2px solid #2d2d3a; color: #e2e8f0; }
-    [data-theme="light"] .quiz-option { background: #f8fafc; border: 2px solid #e2e8f0; color: #1e293b; }
-    .quiz-option:hover { border-color: #6366f1; }
-    .quiz-option.selected { border-color: #6366f1; background: rgba(99,102,241,0.15); }
-    .quiz-option.correct { border-color: #10b981; background: rgba(16,185,129,0.15); }
-    .quiz-option.wrong { border-color: #ef4444; background: rgba(239,68,68,0.15); }
-
-    /* Tab */
-    .tab { padding: 8px 18px; border-radius: 8px; cursor: pointer; font-weight: 500; transition: all 0.2s; font-size: 14px; }
-    [data-theme="dark"] .tab { color: #64748b; }
-    [data-theme="light"] .tab { color: #94a3b8; }
-    .tab.active { background: rgba(99,102,241,0.15); color: #818cf8; }
-
-    /* Resource card */
-    .resource-type-notes { border-top: 3px solid #6366f1; }
-    .resource-type-textbook { border-top: 3px solid #8b5cf6; }
-    .resource-type-question_paper { border-top: 3px solid #f59e0b; }
-    .resource-type-lab_manual { border-top: 3px solid #10b981; }
-    .resource-type-syllabus { border-top: 3px solid #06b6d4; }
-    .resource-type-video { border-top: 3px solid #ef4444; }
-
-    /* Sidebar toggle button */
-    #sidebar-toggle { display: none; }
-    @media (max-width: 768px) { #sidebar-toggle { display: flex; } }
-
-    /* Empty state */
-    .empty-state { text-align: center; padding: 48px 24px; }
-    .empty-state .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
-
-    /* Floating AI button */
-    #ai-fab { position: fixed; bottom: 90px; right: 24px; width: 52px; height: 52px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 8px 25px rgba(99,102,241,0.4); z-index: 30; transition: all 0.2s; }
-    #ai-fab:hover { transform: scale(1.1); }
-
-    /* PWA install prompt */
-    #install-prompt { position: fixed; bottom: 24px; left: 24px; z-index: 100; max-width: 320px; display: none; }
-
-    /* Level badge */
-    .level-badge { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; }
-
-    /* Streak fire */
-    .streak-badge { background: linear-gradient(135deg, #ef4444, #f97316); color: white; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; }
-
-    /* Search highlight */
-    mark { background: rgba(99,102,241,0.3); color: #a5b4fc; padding: 1px 3px; border-radius: 3px; }
+    .skeleton{border-radius:8px;animation:shimmer 1.5s infinite}
+    [data-theme="dark"]  .skeleton{background:linear-gradient(90deg,#18181f 25%,#252530 50%,#18181f 75%);background-size:200% 100%}
+    [data-theme="light"] .skeleton{background:linear-gradient(90deg,#e2e8f0 25%,#f1f5f9 50%,#e2e8f0 75%);background-size:200% 100%}
+    @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+    .typing-dot{width:8px;height:8px;border-radius:50%;background:#6366f1;animation:typingBounce .8s infinite}
+    .typing-dot:nth-child(2){animation-delay:.15s}
+    .typing-dot:nth-child(3){animation-delay:.3s}
+    @keyframes typingBounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-8px)}}
+    .exam-countdown-card{border-radius:16px;padding:20px;text-align:center;position:relative;overflow:hidden}
+    [data-theme="dark"]  .exam-countdown-card{background:linear-gradient(135deg,#1e1e28,#252530);border:1px solid rgba(99,102,241,.2)}
+    [data-theme="light"] .exam-countdown-card{background:linear-gradient(135deg,#eef2ff,#e0e7ff);border:1px solid rgba(99,102,241,.3)}
+    .countdown-num{font-size:2rem;font-weight:800;color:#818cf8;line-height:1}
+    .sidebar-logo{padding:20px 16px 10px}
+    .nav-section-title{padding:6px 24px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#475569;margin-top:8px}
+    select.input-field{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236366f1'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:16px;padding-right:40px}
   </style>
 </head>
 <body>
 
-<!-- Toast Container -->
-<div id="toast-container"></div>
-
-<!-- Sidebar Overlay (mobile) -->
-<div id="sidebar-overlay" onclick="closeSidebar()"></div>
-
-<!-- App Container -->
-<div id="app" style="display:none">
-
-  <!-- Auth Pages -->
-  <div id="auth-container">
-    <!-- Landing Page -->
-    <div id="landing-page" class="page active min-h-screen" style="background: linear-gradient(135deg, #0a0a0f 0%, #111127 50%, #0a0a0f 100%);">
-      <!-- Animated background -->
-      <div style="position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0">
-        <div style="position:absolute;top:20%;left:10%;width:400px;height:400px;background:radial-gradient(circle,rgba(99,102,241,0.12),transparent);border-radius:50%;animation:float 8s ease-in-out infinite"></div>
-        <div style="position:absolute;top:60%;right:10%;width:300px;height:300px;background:radial-gradient(circle,rgba(139,92,246,0.1),transparent);border-radius:50%;animation:float 10s ease-in-out infinite reverse"></div>
+<!-- ===================== AUTH SCREENS ===================== -->
+<div id="auth-screen" style="display:none">
+  <div class="min-h-screen flex items-center justify-center p-4" style="background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(99,102,241,.25),transparent)">
+    <div class="w-full max-w-md">
+      <div class="text-center mb-8">
+        <div class="text-5xl mb-3">🎓</div>
+        <h1 class="text-3xl font-bold gradient-text">VTU Super Platform</h1>
+        <p class="mt-2 text-sm" style="color:#64748b">AI-Powered Learning for VTU Students</p>
       </div>
-      <style>@keyframes float{0%,100%{transform:translate(0,0)}50%{transform:translate(20px,-20px)}}</style>
-
-      <!-- Navbar -->
-      <nav class="relative z-10 flex items-center justify-between px-8 py-5" style="border-bottom:1px solid rgba(255,255,255,0.05)">
-        <div class="flex items-center gap-3">
-          <div style="width:40px;height:40px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px">🎓</div>
-          <div>
-            <div class="font-bold text-lg" style="color:#e2e8f0">VTU Platform</div>
-            <div style="font-size:11px;color:#64748b">Super Learning System</div>
-          </div>
-        </div>
-        <div class="flex items-center gap-3">
-          <button onclick="showPage('login-page')" class="btn-secondary" style="padding:8px 20px;font-size:14px">Login</button>
-          <button onclick="showPage('register-page')" class="btn-primary" style="padding:8px 20px;font-size:14px">Get Started</button>
-        </div>
-      </nav>
-
-      <!-- Hero -->
-      <div class="relative z-10 max-w-6xl mx-auto px-8 py-20 text-center">
-        <div class="badge badge-primary mb-6" style="font-size:13px;padding:6px 16px">🚀 AI-Powered VTU Learning Platform</div>
-        <h1 class="text-6xl font-black mb-6 leading-tight" style="color:#f1f5f9">
-          Master VTU<br><span class="gradient-text">Engineering</span><br>With AI
-        </h1>
-        <p class="text-xl mb-10" style="color:#94a3b8;max-width:600px;margin:0 auto 40px">
-          Complete study resources, AI-powered assistance, quizzes, placement prep, and real-time learning analytics for all 20+ VTU branches.
-        </p>
-        <div class="flex items-center justify-center gap-4 flex-wrap">
-          <button onclick="quickDemo('student')" class="btn-primary" style="padding:14px 32px;font-size:16px;border-radius:12px">
-            <i class="fas fa-play mr-2"></i>Try Student Demo
-          </button>
-          <button onclick="quickDemo('admin')" class="btn-secondary" style="padding:14px 32px;font-size:16px;border-radius:12px">
-            <i class="fas fa-shield-alt mr-2"></i>Admin Demo
-          </button>
-          <button onclick="showPage('register-page')" style="background:transparent;color:#94a3b8;border:none;padding:14px 32px;font-size:16px;cursor:pointer">
-            Sign Up Free →
-          </button>
+      <!-- Tab buttons -->
+      <div class="card p-6">
+        <div class="flex gap-2 mb-6 p-1 rounded-xl" style="background:rgba(99,102,241,.08)">
+          <button class="tab-btn active flex-1" onclick="switchAuthTab('login')">Login</button>
+          <button class="tab-btn flex-1" onclick="switchAuthTab('register')">Register</button>
         </div>
 
-        <!-- Stats Bar -->
-        <div class="grid grid-cols-4 gap-6 mt-20 max-w-4xl mx-auto" style="border-top:1px solid rgba(255,255,255,0.05);padding-top:40px">
-          <div>
-            <div class="text-3xl font-black gradient-text">20+</div>
-            <div style="color:#64748b;font-size:13px;margin-top:4px">Engineering Branches</div>
-          </div>
-          <div>
-            <div class="text-3xl font-black" style="color:#10b981">500+</div>
-            <div style="color:#64748b;font-size:13px;margin-top:4px">Study Resources</div>
-          </div>
-          <div>
-            <div class="text-3xl font-black" style="color:#f59e0b">100+</div>
-            <div style="color:#64748b;font-size:13px;margin-top:4px">Practice Quizzes</div>
-          </div>
-          <div>
-            <div class="text-3xl font-black" style="color:#8b5cf6">AI</div>
-            <div style="color:#64748b;font-size:13px;margin-top:4px">Smart Assistant</div>
-          </div>
-        </div>
-
-        <!-- Features Grid -->
-        <div class="grid grid-cols-3 gap-6 mt-16 max-w-5xl mx-auto text-left">
-          <div class="card p-6">
-            <div style="font-size:28px;margin-bottom:12px">🤖</div>
-            <h3 class="font-bold mb-2" style="color:#e2e8f0">AI Study Assistant</h3>
-            <p style="color:#64748b;font-size:14px">Get contextual answers to your VTU doubts. Subject-aware AI chatbot with markdown responses.</p>
-          </div>
-          <div class="card p-6">
-            <div style="font-size:28px;margin-bottom:12px">📚</div>
-            <h3 class="font-bold mb-2" style="color:#e2e8f0">Complete Resources</h3>
-            <p style="color:#64748b;font-size:14px">Notes, textbooks, question papers, lab manuals for all branches and semesters.</p>
-          </div>
-          <div class="card p-6">
-            <div style="font-size:28px;margin-bottom:12px">🧪</div>
-            <h3 class="font-bold mb-2" style="color:#e2e8f0">Smart Quiz System</h3>
-            <p style="color:#64748b;font-size:14px">Timer-based MCQ quizzes with instant feedback, explanations, and performance analytics.</p>
-          </div>
-          <div class="card p-6">
-            <div style="font-size:28px;margin-bottom:12px">🏆</div>
-            <h3 class="font-bold mb-2" style="color:#e2e8f0">Gamification</h3>
-            <p style="color:#64748b;font-size:14px">Earn points, level up, maintain streaks, collect badges, and compete on the leaderboard.</p>
-          </div>
-          <div class="card p-6">
-            <div style="font-size:28px;margin-bottom:12px">💼</div>
-            <h3 class="font-bold mb-2" style="color:#e2e8f0">Placement Prep</h3>
-            <p style="color:#64748b;font-size:14px">Aptitude, coding, HR questions, company-wise guides, and interview preparation roadmaps.</p>
-          </div>
-          <div class="card p-6">
-            <div style="font-size:28px;margin-bottom:12px">📊</div>
-            <h3 class="font-bold mb-2" style="color:#e2e8f0">Learning Analytics</h3>
-            <p style="color:#64748b;font-size:14px">Track your progress, identify weak areas, and get AI-powered study recommendations.</p>
-          </div>
-        </div>
-
-        <!-- Branches showcase -->
-        <div class="mt-16">
-          <h2 class="text-2xl font-bold mb-6" style="color:#e2e8f0">All VTU Branches Covered</h2>
-          <div class="flex flex-wrap justify-center gap-3">
-            <span id="branch-tags"></span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Login Page -->
-    <div id="login-page" class="page min-h-screen flex items-center justify-center" style="background:linear-gradient(135deg,#0a0a0f,#111127,#0a0a0f)">
-      <div class="card p-8 w-full" style="max-width:440px">
-        <div class="text-center mb-8">
-          <div style="width:56px;height:56px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px">🎓</div>
-          <h2 class="text-2xl font-black gradient-text">Welcome Back!</h2>
-          <p style="color:#64748b;margin-top:6px">Sign in to your VTU account</p>
-        </div>
-        <form id="login-form" onsubmit="handleLogin(event)">
-          <div class="mb-4">
-            <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Email Address</label>
-            <input type="email" id="login-email" class="input-field" placeholder="you@student.vtu.ac.in" required>
-          </div>
-          <div class="mb-6">
-            <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Password</label>
-            <div style="position:relative">
-              <input type="password" id="login-password" class="input-field" placeholder="••••••••" required style="padding-right:42px">
-              <button type="button" onclick="togglePassword('login-password')" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#64748b"><i class="fas fa-eye"></i></button>
-            </div>
-          </div>
-          <button type="submit" id="login-btn" class="btn-primary w-full mb-4" style="padding:12px">
-            <i class="fas fa-sign-in-alt mr-2"></i>Sign In
-          </button>
-        </form>
-        <div style="text-align:center;color:#64748b;font-size:13px;margin:12px 0">— or use demo account —</div>
-        <div class="grid grid-cols-2 gap-3 mb-4">
-          <button onclick="quickDemo('student')" class="btn-secondary" style="padding:10px;font-size:13px"><i class="fas fa-user-graduate mr-1"></i>Student Demo</button>
-          <button onclick="quickDemo('admin')" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#f87171;border-radius:10px;padding:10px;font-size:13px;cursor:pointer;font-weight:600"><i class="fas fa-shield-alt mr-1"></i>Admin Demo</button>
-        </div>
-        <div class="text-center" style="color:#64748b;font-size:14px">
-          Don't have an account? <span onclick="showPage('register-page')" style="color:#818cf8;cursor:pointer;font-weight:600">Sign Up</span>
-        </div>
-        <div class="text-center mt-3">
-          <span onclick="showPage('landing-page')" style="color:#64748b;cursor:pointer;font-size:13px">← Back to Home</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Register Page -->
-    <div id="register-page" class="page min-h-screen flex items-center justify-center py-8" style="background:linear-gradient(135deg,#0a0a0f,#111127,#0a0a0f)">
-      <div class="card p-8 w-full" style="max-width:480px">
-        <div class="text-center mb-6">
-          <div style="width:56px;height:56px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px">🚀</div>
-          <h2 class="text-2xl font-black gradient-text">Create Account</h2>
-          <p style="color:#64748b;margin-top:6px">Join 10,000+ VTU students</p>
-        </div>
-        <form id="register-form" onsubmit="handleRegister(event)">
-          <div class="grid grid-cols-2 gap-3 mb-3">
+        <!-- LOGIN -->
+        <div id="login-form">
+          <div class="space-y-4">
             <div>
-              <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Full Name</label>
-              <input type="text" id="reg-name" class="input-field" placeholder="Rahul Kumar" required>
+              <label class="block text-sm font-medium mb-1" style="color:#94a3b8">Email</label>
+              <input id="login-email" type="email" class="input-field" placeholder="you@vtu.ac.in">
             </div>
             <div>
-              <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Email</label>
-              <input type="email" id="reg-email" class="input-field" placeholder="you@student.vtu.ac.in" required>
+              <label class="block text-sm font-medium mb-1" style="color:#94a3b8">Password</label>
+              <div class="relative">
+                <input id="login-password" type="password" class="input-field" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+                <button onclick="togglePass('login-password')" class="absolute right-3 top-1/2 -translate-y-1/2" style="color:#6366f1"><i class="fas fa-eye"></i></button>
+              </div>
+            </div>
+            <button class="btn-primary w-full py-3" onclick="doLogin()"><i class="fas fa-sign-in-alt mr-2"></i>Login</button>
+            <div class="grid grid-cols-2 gap-3 mt-2">
+              <button class="btn-secondary py-2" onclick="demoLogin('student')"><i class="fas fa-user-graduate mr-1"></i>Demo Student</button>
+              <button class="btn-secondary py-2" onclick="demoLogin('admin')"><i class="fas fa-user-shield mr-1"></i>Demo Admin</button>
             </div>
           </div>
-          <div class="grid grid-cols-2 gap-3 mb-3">
+        </div>
+
+        <!-- REGISTER -->
+        <div id="register-form" style="display:none">
+          <div class="space-y-4">
             <div>
-              <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Branch</label>
-              <select id="reg-branch" class="input-field">
-                <option value="CSE">CSE</option><option value="ISE">ISE</option><option value="AIML">AI & ML</option>
-                <option value="DS">Data Science</option><option value="CS">Cyber Security</option>
-                <option value="ECE">ECE</option><option value="EEE">EEE</option><option value="ME">Mechanical</option>
-                <option value="CV">Civil</option><option value="CH">Chemical</option>
-              </select>
+              <label class="block text-sm font-medium mb-1" style="color:#94a3b8">Full Name</label>
+              <input id="reg-name" type="text" class="input-field" placeholder="Your full name">
             </div>
             <div>
-              <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Semester</label>
-              <select id="reg-semester" class="input-field">
-                <option>1</option><option>2</option><option>3</option><option>4</option>
-                <option>5</option><option>6</option><option>7</option><option>8</option>
-              </select>
+              <label class="block text-sm font-medium mb-1" style="color:#94a3b8">Email</label>
+              <input id="reg-email" type="email" class="input-field" placeholder="you@vtu.ac.in">
             </div>
-          </div>
-          <div class="mb-3">
-            <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Password</label>
-            <input type="password" id="reg-password" class="input-field" placeholder="Min 6 characters" required>
-          </div>
-          <div class="mb-6">
-            <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Confirm Password</label>
-            <input type="password" id="reg-confirm" class="input-field" placeholder="Repeat password" required>
-          </div>
-          <button type="submit" id="reg-btn" class="btn-primary w-full mb-4" style="padding:12px">
-            <i class="fas fa-user-plus mr-2"></i>Create Account
-          </button>
-        </form>
-        <div class="text-center" style="color:#64748b;font-size:14px">
-          Already have an account? <span onclick="showPage('login-page')" style="color:#818cf8;cursor:pointer;font-weight:600">Sign In</span>
-        </div>
-        <div class="text-center mt-3">
-          <span onclick="showPage('landing-page')" style="color:#64748b;cursor:pointer;font-size:13px">← Back to Home</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Main App (after login) -->
-  <div id="main-app" style="display:none">
-    <div class="flex">
-      <!-- Sidebar -->
-      <div id="sidebar" class="fixed top-0 left-0 h-full z-50 flex flex-col" style="overflow-y:auto">
-        <!-- Logo -->
-        <div class="px-5 py-5 flex items-center justify-between" style="border-bottom:1px solid rgba(255,255,255,0.05)">
-          <div class="flex items-center gap-3">
-            <div style="width:36px;height:36px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px">🎓</div>
             <div>
-              <div class="font-bold text-sm" style="color:#e2e8f0">VTU Platform</div>
-              <div id="user-role-badge" style="font-size:10px;color:#64748b">Loading...</div>
+              <label class="block text-sm font-medium mb-1" style="color:#94a3b8">Password</label>
+              <input id="reg-password" type="password" class="input-field" placeholder="Min 6 characters">
             </div>
-          </div>
-          <button onclick="closeSidebar()" style="display:none;background:none;border:none;cursor:pointer;color:#64748b;font-size:18px" id="sidebar-close"><i class="fas fa-times"></i></button>
-        </div>
-
-        <!-- User info -->
-        <div class="px-4 py-3" style="border-bottom:1px solid rgba(255,255,255,0.05)">
-          <div class="flex items-center gap-3">
-            <div id="sidebar-avatar" style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:16px;color:white;font-weight:700">?</div>
-            <div style="flex:1;min-width:0">
-              <div id="sidebar-name" class="font-semibold text-sm" style="color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Loading...</div>
-              <div id="sidebar-branch" style="font-size:11px;color:#64748b">...</div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-sm font-medium mb-1" style="color:#94a3b8">Branch</label>
+                <select id="reg-branch" class="input-field">
+                  <option value="CSE">CSE</option><option value="ISE">ISE</option><option value="AIML">AI&ML</option>
+                  <option value="DS">Data Science</option><option value="CS">Cyber Security</option>
+                  <option value="ECE">ECE</option><option value="EEE">EEE</option><option value="ME">Mechanical</option>
+                  <option value="CV">Civil</option><option value="BT">Biotechnology</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1" style="color:#94a3b8">Semester</label>
+                <select id="reg-semester" class="input-field">
+                  <option value="1">Sem 1</option><option value="2">Sem 2</option><option value="3">Sem 3</option>
+                  <option value="4">Sem 4</option><option value="5">Sem 5</option><option value="6">Sem 6</option>
+                  <option value="7">Sem 7</option><option value="8">Sem 8</option>
+                </select>
+              </div>
             </div>
-          </div>
-          <div class="flex items-center gap-2 mt-2">
-            <span class="level-badge" id="sidebar-level">Lv.1</span>
-            <span class="streak-badge" id="sidebar-streak">🔥 0</span>
-            <span class="badge badge-primary" id="sidebar-points">⭐ 0</span>
-          </div>
-        </div>
-
-        <!-- Navigation -->
-        <nav class="flex-1 py-3">
-          <div id="nav-student">
-            <div style="padding:8px 16px 4px;font-size:10px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase">MAIN</div>
-            <div class="nav-item active" onclick="navigate('dashboard')"><i class="fas fa-th-large w-5"></i><span>Dashboard</span></div>
-            <div class="nav-item" onclick="navigate('subjects')"><i class="fas fa-book w-5"></i><span>Subjects</span></div>
-            <div class="nav-item" onclick="navigate('resources')"><i class="fas fa-file-pdf w-5"></i><span>Resources</span></div>
-            <div class="nav-item" onclick="navigate('ai-chat')"><i class="fas fa-robot w-5"></i><span>AI Assistant</span></div>
-            <div style="padding:8px 16px 4px;margin-top:4px;font-size:10px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase">LEARN</div>
-            <div class="nav-item" onclick="navigate('quiz')"><i class="fas fa-question-circle w-5"></i><span>Quizzes</span></div>
-            <div class="nav-item" onclick="navigate('placement')"><i class="fas fa-briefcase w-5"></i><span>Placement</span></div>
-            <div class="nav-item" onclick="navigate('planner')"><i class="fas fa-calendar-alt w-5"></i><span>Study Planner</span></div>
-            <div class="nav-item" onclick="navigate('challenge')"><i class="fas fa-fire w-5"></i><span>Daily Challenge</span></div>
-            <div style="padding:8px 16px 4px;margin-top:4px;font-size:10px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase">PROGRESS</div>
-            <div class="nav-item" onclick="navigate('progress')"><i class="fas fa-chart-line w-5"></i><span>My Progress</span></div>
-            <div class="nav-item" onclick="navigate('leaderboard')"><i class="fas fa-trophy w-5"></i><span>Leaderboard</span></div>
-            <div class="nav-item" onclick="navigate('badges')"><i class="fas fa-medal w-5"></i><span>Badges</span></div>
-            <div class="nav-item" onclick="navigate('bookmarks')"><i class="fas fa-bookmark w-5"></i><span>Bookmarks</span></div>
-            <div style="padding:8px 16px 4px;margin-top:4px;font-size:10px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase">OTHER</div>
-            <div class="nav-item" onclick="navigate('exams')"><i class="fas fa-clock w-5"></i><span>Exam Countdown</span></div>
-            <div class="nav-item" onclick="navigate('announcements')"><i class="fas fa-bullhorn w-5"></i><span>Announcements</span></div>
-            <div class="nav-item" onclick="navigate('profile')"><i class="fas fa-user-circle w-5"></i><span>Profile</span></div>
-          </div>
-          <div id="nav-admin" style="display:none">
-            <div style="padding:8px 16px 4px;font-size:10px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase">ADMIN</div>
-            <div class="nav-item active" onclick="navigate('admin-dashboard')"><i class="fas fa-tachometer-alt w-5"></i><span>Dashboard</span></div>
-            <div class="nav-item" onclick="navigate('admin-resources')"><i class="fas fa-file-upload w-5"></i><span>Resources</span></div>
-            <div class="nav-item" onclick="navigate('admin-quizzes')"><i class="fas fa-question-circle w-5"></i><span>Quizzes</span></div>
-            <div class="nav-item" onclick="navigate('admin-users')"><i class="fas fa-users w-5"></i><span>Students</span></div>
-            <div class="nav-item" onclick="navigate('admin-announcements')"><i class="fas fa-bullhorn w-5"></i><span>Announcements</span></div>
-            <div class="nav-item" onclick="navigate('admin-exams')"><i class="fas fa-calendar w-5"></i><span>Exam Dates</span></div>
-            <div class="nav-item" onclick="navigate('admin-placement')"><i class="fas fa-briefcase w-5"></i><span>Placement Q&A</span></div>
-            <div style="padding:8px 16px 4px;margin-top:4px;font-size:10px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase">STUDENT ACCESS</div>
-            <div class="nav-item" onclick="navigate('subjects')"><i class="fas fa-book w-5"></i><span>Browse Subjects</span></div>
-            <div class="nav-item" onclick="navigate('leaderboard')"><i class="fas fa-trophy w-5"></i><span>Leaderboard</span></div>
-            <div class="nav-item" onclick="navigate('profile')"><i class="fas fa-user-circle w-5"></i><span>Profile</span></div>
-          </div>
-        </nav>
-
-        <!-- Bottom actions -->
-        <div class="px-4 py-4" style="border-top:1px solid rgba(255,255,255,0.05)">
-          <button onclick="toggleTheme()" class="nav-item w-full mb-2" style="justify-content:start">
-            <i id="theme-icon" class="fas fa-moon w-5"></i><span>Toggle Theme</span>
-          </button>
-          <button onclick="handleLogout()" class="nav-item w-full" style="color:#ef4444 !important">
-            <i class="fas fa-sign-out-alt w-5"></i><span>Logout</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Main Content -->
-      <div id="main-content" style="flex:1;margin-left:260px;min-height:100vh">
-        <!-- Top bar -->
-        <div class="sticky top-0 z-30 flex items-center justify-between px-6 py-3 glass" style="border-bottom:1px solid rgba(255,255,255,0.05)">
-          <div class="flex items-center gap-4">
-            <button id="sidebar-toggle" onclick="toggleSidebar()" style="background:none;border:none;cursor:pointer;font-size:20px;color:#64748b"><i class="fas fa-bars"></i></button>
-            <div style="position:relative">
-              <input type="text" id="global-search" placeholder="Search subjects, resources..." class="input-field" style="width:280px;padding-left:36px" oninput="handleGlobalSearch(this.value)">
-              <i class="fas fa-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#64748b;font-size:13px"></i>
-            </div>
-          </div>
-          <div class="flex items-center gap-4">
-            <div style="position:relative">
-              <button onclick="navigate('notifications')" style="background:none;border:none;cursor:pointer;font-size:18px;color:#64748b;position:relative">
-                <i class="fas fa-bell"></i>
-                <span id="notif-count" class="notif-dot" style="display:none">0</span>
-              </button>
-            </div>
-            <div onclick="navigate('profile')" class="flex items-center gap-2 cursor-pointer">
-              <div id="topbar-avatar" style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:14px;color:white;font-weight:700">?</div>
-              <span id="topbar-name" style="font-size:14px;font-weight:600;color:#94a3b8">Loading...</span>
-            </div>
+            <button class="btn-primary w-full py-3" onclick="doRegister()"><i class="fas fa-user-plus mr-2"></i>Create Account</button>
           </div>
         </div>
-
-        <!-- Page Content -->
-        <div id="page-content" class="p-6">
-          <div class="flex items-center justify-center py-20">
-            <div class="spinner"></div>
-          </div>
-        </div>
+        <p class="text-center text-xs mt-4" style="color:#475569">Demo: student@vtu.ac.in / Admin@123</p>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Modals -->
-<div id="resource-modal" class="modal-overlay">
-  <div class="modal" style="max-width:700px">
-    <div class="flex items-center justify-between mb-6">
-      <h3 class="text-xl font-bold" id="resource-modal-title" style="color:#e2e8f0">Resource Details</h3>
-      <button onclick="closeModal('resource-modal')" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:20px"><i class="fas fa-times"></i></button>
+<!-- ===================== LANDING PAGE ===================== -->
+<div id="landing-screen">
+  <nav class="glass fixed top-0 w-full z-50 px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl">🎓</span>
+      <span class="font-bold text-lg gradient-text">VTU Super Platform</span>
     </div>
-    <div id="resource-modal-content"></div>
+    <div class="hidden md:flex items-center gap-6 text-sm" style="color:#94a3b8">
+      <a href="#features" class="hover:text-primary-400 transition-colors">Features</a>
+      <a href="#branches" class="hover:text-primary-400 transition-colors">Branches</a>
+      <a href="#about" class="hover:text-primary-400 transition-colors">About</a>
+    </div>
+    <div class="flex gap-3">
+      <button class="btn-secondary text-sm" onclick="showAuth('login')">Login</button>
+      <button class="btn-primary text-sm" onclick="showAuth('register')">Get Started</button>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <div class="landing-hero">
+    <div class="text-center max-w-4xl mx-auto px-6 pt-24">
+      <div class="badge-pill badge-purple mb-6 text-sm"><span>🚀</span> AI-Powered VTU Learning</div>
+      <h1 class="text-5xl md:text-7xl font-extrabold leading-tight mb-6">
+        Master VTU with<br><span class="gradient-text">AI Intelligence</span>
+      </h1>
+      <p class="text-lg md:text-xl mb-10 max-w-2xl mx-auto" style="color:#94a3b8">
+        Complete learning platform for all VTU branches. AI chat, smart quizzes, PDF resources, placement prep, gamification and more.
+      </p>
+      <div class="flex flex-wrap gap-4 justify-center mb-12">
+        <button class="btn-primary px-8 py-4 text-base" onclick="demoLogin('student')"><i class="fas fa-play mr-2"></i>Try as Student</button>
+        <button class="btn-secondary px-8 py-4 text-base" onclick="showAuth('login')"><i class="fas fa-sign-in-alt mr-2"></i>Login</button>
+      </div>
+      <!-- Stats -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-2xl mx-auto">
+        <div class="card p-4 text-center"><div class="text-2xl font-bold text-primary-400">20+</div><div class="text-xs" style="color:#64748b">VTU Branches</div></div>
+        <div class="card p-4 text-center"><div class="text-2xl font-bold text-primary-400">500+</div><div class="text-xs" style="color:#64748b">Resources</div></div>
+        <div class="card p-4 text-center"><div class="text-2xl font-bold text-primary-400">AI</div><div class="text-xs" style="color:#64748b">Smart Chat</div></div>
+        <div class="card p-4 text-center"><div class="text-2xl font-bold text-primary-400">100+</div><div class="text-xs" style="color:#64748b">Quizzes</div></div>
+      </div>
+    </div>
   </div>
+
+  <!-- Features -->
+  <section id="features" class="py-24 px-6 max-w-6xl mx-auto">
+    <div class="text-center mb-16">
+      <h2 class="text-4xl font-bold mb-4">Everything You Need to <span class="gradient-text">Excel</span></h2>
+      <p style="color:#64748b">Comprehensive tools designed specifically for VTU students</p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div class="feature-card"><div class="text-3xl mb-3">🤖</div><h3 class="font-bold text-lg mb-2">AI Assistant</h3><p class="text-sm" style="color:#64748b">Subject-aware chatbot with PDF-based answers and explanations</p></div>
+      <div class="feature-card"><div class="text-3xl mb-3">📚</div><h3 class="font-bold text-lg mb-2">PDF Resources</h3><p class="text-sm" style="color:#64748b">Notes, textbooks, question papers, lab manuals for all subjects</p></div>
+      <div class="feature-card"><div class="text-3xl mb-3">🎯</div><h3 class="font-bold text-lg mb-2">Smart Quizzes</h3><p class="text-sm" style="color:#64748b">Timed MCQ quizzes with instant results and detailed explanations</p></div>
+      <div class="feature-card"><div class="text-3xl mb-3">🏆</div><h3 class="font-bold text-lg mb-2">Gamification</h3><p class="text-sm" style="color:#64748b">Points, badges, streaks, daily challenges, and leaderboard</p></div>
+      <div class="feature-card"><div class="text-3xl mb-3">💼</div><h3 class="font-bold text-lg mb-2">Placement Prep</h3><p class="text-sm" style="color:#64748b">Aptitude, coding, HR questions with company-wise practice</p></div>
+      <div class="feature-card"><div class="text-3xl mb-3">📊</div><h3 class="font-bold text-lg mb-2">Analytics</h3><p class="text-sm" style="color:#64748b">Track progress, weak areas, quiz performance, and study streaks</p></div>
+      <div class="feature-card"><div class="text-3xl mb-3">📅</div><h3 class="font-bold text-lg mb-2">Study Planner</h3><p class="text-sm" style="color:#64748b">Schedule sessions, set goals, track completion and reminders</p></div>
+      <div class="feature-card"><div class="text-3xl mb-3">⏰</div><h3 class="font-bold text-lg mb-2">Exam Countdown</h3><p class="text-sm" style="color:#64748b">Live countdowns for VTU exams with revision tracker</p></div>
+      <div class="feature-card"><div class="text-3xl mb-3">📱</div><h3 class="font-bold text-lg mb-2">PWA Ready</h3><p class="text-sm" style="color:#64748b">Install on mobile, works offline, push notifications</p></div>
+    </div>
+  </section>
+
+  <!-- Branches -->
+  <section id="branches" class="py-16 px-6 max-w-6xl mx-auto">
+    <div class="text-center mb-12">
+      <h2 class="text-3xl font-bold mb-3">All VTU <span class="gradient-text">Branches</span></h2>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+      <div class="card p-4 text-center text-sm font-medium">💻 CSE</div>
+      <div class="card p-4 text-center text-sm font-medium">🖥️ ISE</div>
+      <div class="card p-4 text-center text-sm font-medium">🤖 AI&ML</div>
+      <div class="card p-4 text-center text-sm font-medium">📊 Data Science</div>
+      <div class="card p-4 text-center text-sm font-medium">🔒 Cyber Security</div>
+      <div class="card p-4 text-center text-sm font-medium">📡 ECE</div>
+      <div class="card p-4 text-center text-sm font-medium">⚡ EEE</div>
+      <div class="card p-4 text-center text-sm font-medium">🔬 EIE</div>
+      <div class="card p-4 text-center text-sm font-medium">⚙️ Mechanical</div>
+      <div class="card p-4 text-center text-sm font-medium">🏗️ Civil</div>
+      <div class="card p-4 text-center text-sm font-medium">🧪 Chemical</div>
+      <div class="card p-4 text-center text-sm font-medium">✈️ Aeronautical</div>
+      <div class="card p-4 text-center text-sm font-medium">🚀 Aerospace</div>
+      <div class="card p-4 text-center text-sm font-medium">🧬 Biotechnology</div>
+      <div class="card p-4 text-center text-sm font-medium">🏛️ Architecture</div>
+    </div>
+  </section>
+
+  <footer class="text-center py-10 border-t" style="border-color:rgba(255,255,255,.07);color:#475569">
+    <p>© 2024 VTU Super Learning Platform · Built with ❤️ for VTU Students</p>
+  </footer>
 </div>
 
-<div id="quiz-review-modal" class="modal-overlay">
-  <div class="modal" style="max-width:700px;max-height:85vh">
-    <div class="flex items-center justify-between mb-4">
-      <h3 class="text-xl font-bold gradient-text">Quiz Review</h3>
-      <button onclick="closeModal('quiz-review-modal')" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:20px"><i class="fas fa-times"></i></button>
-    </div>
-    <div id="quiz-review-content"></div>
-  </div>
-</div>
+<!-- ===================== MAIN APP ===================== -->
+<div id="app-screen" style="display:none">
 
-<div id="add-resource-modal" class="modal-overlay">
-  <div class="modal" style="max-width:600px">
-    <div class="flex items-center justify-between mb-6">
-      <h3 class="text-xl font-bold gradient-text">Upload Resource</h3>
-      <button onclick="closeModal('add-resource-modal')" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:20px"><i class="fas fa-times"></i></button>
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo flex items-center gap-3">
+      <span class="text-3xl">🎓</span>
+      <div>
+        <div class="font-bold text-sm gradient-text">VTU Platform</div>
+        <div id="sidebar-role-badge" class="badge-pill badge-purple text-xs mt-1">Student</div>
+      </div>
     </div>
-    <form id="add-resource-form" onsubmit="handleAddResource(event)">
-      <div class="grid grid-cols-2 gap-4 mb-4">
-        <div class="col-span-2">
-          <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Title *</label>
-          <input type="text" id="res-title" class="input-field" placeholder="e.g., Data Structures Complete Notes" required>
+
+    <div class="px-4 pb-4">
+      <div id="sidebar-user-info" class="card p-3 flex items-center gap-3">
+        <div id="sidebar-avatar" class="w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">U</div>
+        <div class="overflow-hidden">
+          <div id="sidebar-name" class="font-semibold text-sm truncate">User</div>
+          <div id="sidebar-points" class="text-xs" style="color:#64748b">⭐ 0 pts · Lv 1</div>
         </div>
+      </div>
+    </div>
+
+    <nav id="nav-menu" class="flex flex-col"></nav>
+
+    <div class="absolute bottom-0 left-0 right-0 p-4 border-t" style="border-color:rgba(255,255,255,.06)">
+      <button class="nav-item w-full" onclick="toggleTheme()"><i class="fas fa-moon w-5 text-center"></i>Toggle Theme</button>
+      <button class="nav-item w-full" onclick="doLogout()"><i class="fas fa-sign-out-alt w-5 text-center"></i>Logout</button>
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <div class="main-content" id="main-content">
+    <!-- Topbar -->
+    <div class="topbar glass mb-6 rounded-2xl">
+      <div class="flex items-center gap-3">
+        <button onclick="toggleSidebar()" class="btn-secondary px-3 py-2"><i class="fas fa-bars"></i></button>
         <div>
-          <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Type *</label>
-          <select id="res-type" class="input-field" required>
-            <option value="notes">📝 Notes</option>
-            <option value="textbook">📖 Textbook</option>
-            <option value="question_paper">📋 Question Paper</option>
-            <option value="lab_manual">🔬 Lab Manual</option>
-            <option value="syllabus">📄 Syllabus</option>
-            <option value="video">🎬 Video Link</option>
+          <div id="page-title" class="font-bold">Dashboard</div>
+          <div id="page-subtitle" class="text-xs" style="color:#64748b">Welcome back!</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="relative hidden md:block">
+          <input id="global-search" type="text" placeholder="Search subjects, resources..." class="input-field text-sm" style="width:240px;padding-left:36px" oninput="globalSearch(this.value)">
+          <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs" style="color:#64748b"></i>
+        </div>
+        <button onclick="showPage('notifications')" class="relative btn-secondary px-3 py-2">
+          <i class="fas fa-bell"></i>
+          <span id="notif-count" class="absolute -top-1 -right-1 w-4 h-4 rounded-full text-xs flex items-center justify-center font-bold" style="background:#ef4444;color:#fff;display:none">0</span>
+        </button>
+        <div id="topbar-avatar" class="w-9 h-9 rounded-full flex items-center justify-center font-bold cursor-pointer" style="background:linear-gradient(135deg,#6366f1,#4f46e5)" onclick="showPage('profile')">U</div>
+      </div>
+    </div>
+
+    <!-- Pages -->
+    <div id="pages-container">
+
+      <!-- ===== DASHBOARD PAGE ===== -->
+      <div id="page-dashboard" class="page active">
+        <div id="dashboard-content"></div>
+      </div>
+
+      <!-- ===== BRANCHES PAGE ===== -->
+      <div id="page-branches" class="page">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-2xl font-bold">VTU Branches</h2>
+          <div class="flex gap-2">
+            <input id="branch-search" type="text" placeholder="Search branch..." class="input-field text-sm" style="width:200px" oninput="filterBranches(this.value)">
+          </div>
+        </div>
+        <div id="branches-content"></div>
+      </div>
+
+      <!-- ===== SUBJECTS PAGE ===== -->
+      <div id="page-subjects" class="page">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-2xl font-bold">Subjects</h2>
+          <div class="flex gap-2">
+            <select id="subject-sem-filter" class="input-field text-sm" style="width:130px" onchange="loadSubjects()">
+              <option value="">All Semesters</option>
+              <option value="1">Sem 1</option><option value="2">Sem 2</option><option value="3">Sem 3</option>
+              <option value="4">Sem 4</option><option value="5">Sem 5</option><option value="6">Sem 6</option>
+              <option value="7">Sem 7</option><option value="8">Sem 8</option>
+            </select>
+          </div>
+        </div>
+        <div id="subjects-content"></div>
+      </div>
+
+      <!-- ===== RESOURCES PAGE ===== -->
+      <div id="page-resources" class="page">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <h2 class="text-2xl font-bold">Resources</h2>
+          <div class="flex flex-wrap gap-2">
+            <select id="res-type-filter" class="input-field text-sm" style="width:140px" onchange="loadResources()">
+              <option value="">All Types</option>
+              <option value="notes">📝 Notes</option><option value="syllabus">📋 Syllabus</option>
+              <option value="textbook">📚 Textbook</option><option value="question_paper">❓ Question Papers</option>
+              <option value="lab_manual">🔬 Lab Manual</option><option value="video">🎥 Video</option>
+            </select>
+            <select id="res-sem-filter" class="input-field text-sm" style="width:120px" onchange="loadResources()">
+              <option value="">All Sem</option>
+              <option value="1">Sem 1</option><option value="2">Sem 2</option><option value="3">Sem 3</option>
+              <option value="4">Sem 4</option><option value="5">Sem 5</option><option value="6">Sem 6</option>
+              <option value="7">Sem 7</option><option value="8">Sem 8</option>
+            </select>
+            <input id="res-search" type="text" placeholder="Search resources..." class="input-field text-sm" style="width:190px" oninput="loadResources()">
+            <button id="admin-upload-btn" class="btn-primary text-sm" onclick="showUploadModal()" style="display:none"><i class="fas fa-upload mr-1"></i>Upload</button>
+          </div>
+        </div>
+        <div id="resources-content"></div>
+      </div>
+
+      <!-- ===== QUIZ PAGE ===== -->
+      <div id="page-quiz" class="page">
+        <div id="quiz-list-view">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-2xl font-bold">Quizzes</h2>
+            <button id="create-quiz-btn" class="btn-primary" onclick="showCreateQuizModal()" style="display:none"><i class="fas fa-plus mr-1"></i>Create Quiz</button>
+          </div>
+          <div id="quiz-list-content"></div>
+        </div>
+        <div id="quiz-take-view" style="display:none">
+          <div id="quiz-take-content"></div>
+        </div>
+        <div id="quiz-result-view" style="display:none">
+          <div id="quiz-result-content"></div>
+        </div>
+      </div>
+
+      <!-- ===== AI ASSISTANT PAGE ===== -->
+      <div id="page-ai" class="page">
+        <div class="flex flex-col h-full" style="height:calc(100vh - 160px)">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-2xl font-bold">🤖 AI Assistant</h2>
+            <div class="flex gap-2">
+              <select id="ai-subject-select" class="input-field text-sm" style="width:180px">
+                <option value="">General (Any Topic)</option>
+              </select>
+              <button class="btn-secondary text-sm" onclick="clearChat()"><i class="fas fa-trash mr-1"></i>Clear</button>
+            </div>
+          </div>
+          <div class="card flex flex-col" style="flex:1;overflow:hidden">
+            <div id="chat-messages" class="flex flex-col gap-3 p-4 overflow-y-auto" style="flex:1">
+              <div class="text-center py-8">
+                <div class="text-5xl mb-3">🤖</div>
+                <p class="font-semibold">VTU AI Assistant</p>
+                <p class="text-sm mt-1" style="color:#64748b">Ask me anything about your VTU subjects, concepts, or problems!</p>
+                <div class="grid grid-cols-2 gap-2 mt-4 max-w-sm mx-auto">
+                  <button class="card p-3 text-xs text-left hover:border-primary-500 cursor-pointer" onclick="quickChat('Explain Big O notation with examples')">Explain Big O notation</button>
+                  <button class="card p-3 text-xs text-left hover:border-primary-500 cursor-pointer" onclick="quickChat('What is deadlock in OS and how to prevent it?')">Deadlock in OS</button>
+                  <button class="card p-3 text-xs text-left hover:border-primary-500 cursor-pointer" onclick="quickChat('How does quicksort work? Explain with example')">How quicksort works</button>
+                  <button class="card p-3 text-xs text-left hover:border-primary-500 cursor-pointer" onclick="quickChat('What are the VTU exam preparation tips?')">Exam preparation tips</button>
+                </div>
+              </div>
+            </div>
+            <div class="border-t p-3" style="border-color:rgba(255,255,255,.07)">
+              <div class="flex gap-2">
+                <input id="chat-input" type="text" class="input-field text-sm" placeholder="Ask anything about VTU subjects..." onkeydown="if(event.key==='Enter')sendChat()">
+                <button class="btn-primary px-4" onclick="sendChat()"><i class="fas fa-paper-plane"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== PLACEMENT PAGE ===== -->
+      <div id="page-placement" class="page">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-2xl font-bold">💼 Placement Prep</h2>
+          <div class="flex gap-2">
+            <select id="placement-cat" class="input-field text-sm" style="width:150px" onchange="loadPlacement()">
+              <option value="">All Categories</option>
+              <option value="aptitude">🧮 Aptitude</option>
+              <option value="coding">💻 Coding</option>
+              <option value="technical">⚙️ Technical</option>
+              <option value="hr">🤝 HR</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <button class="card p-4 text-center cursor-pointer hover:border-primary-500" onclick="filterPlacement('aptitude')">
+            <div class="text-2xl mb-1">🧮</div><div class="text-sm font-semibold">Aptitude</div>
+          </button>
+          <button class="card p-4 text-center cursor-pointer hover:border-primary-500" onclick="filterPlacement('coding')">
+            <div class="text-2xl mb-1">💻</div><div class="text-sm font-semibold">Coding</div>
+          </button>
+          <button class="card p-4 text-center cursor-pointer hover:border-primary-500" onclick="filterPlacement('technical')">
+            <div class="text-2xl mb-1">⚙️</div><div class="text-sm font-semibold">Technical</div>
+          </button>
+          <button class="card p-4 text-center cursor-pointer hover:border-primary-500" onclick="filterPlacement('hr')">
+            <div class="text-2xl mb-1">🤝</div><div class="text-sm font-semibold">HR Round</div>
+          </button>
+        </div>
+        <div id="placement-content"></div>
+      </div>
+
+      <!-- ===== STUDY PLANNER PAGE ===== -->
+      <div id="page-planner" class="page">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-2xl font-bold">📅 Study Planner</h2>
+          <button class="btn-primary" onclick="showAddPlanModal()"><i class="fas fa-plus mr-1"></i>Add Session</button>
+        </div>
+        <div id="planner-content"></div>
+      </div>
+
+      <!-- ===== NOTIFICATIONS PAGE ===== -->
+      <div id="page-notifications" class="page">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-2xl font-bold">🔔 Notifications</h2>
+          <button class="btn-secondary text-sm" onclick="markAllRead()"><i class="fas fa-check-double mr-1"></i>Mark All Read</button>
+        </div>
+        <div id="notifications-content"></div>
+      </div>
+
+      <!-- ===== GAMIFICATION PAGE ===== -->
+      <div id="page-gamification" class="page">
+        <div class="mb-6">
+          <h2 class="text-2xl font-bold">🏆 Achievements & Leaderboard</h2>
+          <p class="text-sm mt-1" style="color:#64748b">Earn points, unlock badges, and compete with classmates</p>
+        </div>
+        <div id="gamification-content"></div>
+      </div>
+
+      <!-- ===== EXAMS PAGE ===== -->
+      <div id="page-exams" class="page">
+        <div class="mb-6">
+          <h2 class="text-2xl font-bold">⏰ Exam Countdown</h2>
+          <p class="text-sm mt-1" style="color:#64748b">Track upcoming VTU examinations</p>
+        </div>
+        <div id="exams-content"></div>
+      </div>
+
+      <!-- ===== ANALYTICS PAGE ===== -->
+      <div id="page-analytics" class="page">
+        <div class="mb-6">
+          <h2 class="text-2xl font-bold">📊 Analytics & Progress</h2>
+        </div>
+        <div id="analytics-content"></div>
+      </div>
+
+      <!-- ===== PROFILE PAGE ===== -->
+      <div id="page-profile" class="page">
+        <div class="mb-6">
+          <h2 class="text-2xl font-bold">👤 My Profile</h2>
+        </div>
+        <div id="profile-content"></div>
+      </div>
+
+      <!-- ===== ADMIN: USERS PAGE ===== -->
+      <div id="page-admin-users" class="page">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-2xl font-bold">👥 Manage Users</h2>
+        </div>
+        <div id="admin-users-content"></div>
+      </div>
+
+      <!-- ===== ADMIN: ANNOUNCEMENTS PAGE ===== -->
+      <div id="page-announcements" class="page">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-2xl font-bold">📢 Announcements</h2>
+          <button id="add-announcement-btn" class="btn-primary" onclick="showAddAnnouncementModal()" style="display:none"><i class="fas fa-plus mr-1"></i>Add</button>
+        </div>
+        <div id="announcements-content"></div>
+      </div>
+
+      <!-- ===== DAILY CHALLENGE PAGE ===== -->
+      <div id="page-challenge" class="page">
+        <div class="mb-6">
+          <h2 class="text-2xl font-bold">🔥 Daily Challenge</h2>
+          <p class="text-sm mt-1" style="color:#64748b">Daily MCQ and coding challenges with bonus points</p>
+        </div>
+        <div id="challenge-content"></div>
+      </div>
+
+    </div><!-- /pages-container -->
+  </div><!-- /main-content -->
+</div><!-- /app-screen -->
+
+<!-- ===================== MODALS ===================== -->
+
+<!-- Upload Resource Modal -->
+<div id="upload-modal" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="flex items-center justify-between mb-5">
+      <h3 class="text-lg font-bold">📤 Upload Resource</h3>
+      <button onclick="closeModal('upload-modal')" style="color:#64748b"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="space-y-4">
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Title *</label><input id="upload-title" type="text" class="input-field" placeholder="Resource title"></div>
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Description</label><textarea id="upload-desc" class="input-field" rows="2" placeholder="Short description"></textarea></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Type *</label>
+          <select id="upload-type" class="input-field">
+            <option value="notes">Notes</option><option value="syllabus">Syllabus</option>
+            <option value="textbook">Textbook</option><option value="question_paper">Question Paper</option>
+            <option value="lab_manual">Lab Manual</option><option value="video">Video Link</option>
           </select>
         </div>
-        <div>
-          <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Branch</label>
-          <select id="res-branch" class="input-field" onchange="loadSubjectsForAdmin(this.value)">
-            <option value="">Select Branch</option>
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Semester</label>
+          <select id="upload-semester" class="input-field">
+            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+            <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+            <option value="7">7</option><option value="8">8</option>
+          </select>
+        </div>
+      </div>
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">File URL (PDF/Video link) *</label><input id="upload-url" type="url" class="input-field" placeholder="https://..."></div>
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Tags (comma-separated)</label><input id="upload-tags" type="text" class="input-field" placeholder="arrays, sorting, algorithms"></div>
+      <div class="flex items-center gap-2"><input id="upload-important" type="checkbox" class="w-4 h-4"><label class="text-sm" style="color:#94a3b8">Mark as Important</label></div>
+      <div class="flex gap-3 pt-2">
+        <button class="btn-secondary flex-1" onclick="closeModal('upload-modal')">Cancel</button>
+        <button class="btn-primary flex-1" onclick="submitUpload()"><i class="fas fa-upload mr-1"></i>Upload</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Study Plan Modal -->
+<div id="plan-modal" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="flex items-center justify-between mb-5">
+      <h3 class="text-lg font-bold">📅 Add Study Session</h3>
+      <button onclick="closeModal('plan-modal')" style="color:#64748b"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="space-y-4">
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Title *</label><input id="plan-title" type="text" class="input-field" placeholder="e.g. Study Data Structures Module 3"></div>
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Description</label><textarea id="plan-desc" class="input-field" rows="2" placeholder="What will you study?"></textarea></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Date *</label><input id="plan-date" type="date" class="input-field"></div>
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Duration (min)</label><input id="plan-duration" type="number" class="input-field" value="60" min="15" max="480"></div>
+      </div>
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Priority</label>
+        <select id="plan-priority" class="input-field">
+          <option value="low">🟢 Low</option><option value="medium" selected>🟡 Medium</option><option value="high">🔴 High</option>
+        </select>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button class="btn-secondary flex-1" onclick="closeModal('plan-modal')">Cancel</button>
+        <button class="btn-primary flex-1" onclick="submitPlan()"><i class="fas fa-plus mr-1"></i>Add Session</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Announcement Modal -->
+<div id="announcement-modal" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="flex items-center justify-between mb-5">
+      <h3 class="text-lg font-bold">📢 Add Announcement</h3>
+      <button onclick="closeModal('announcement-modal')" style="color:#64748b"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="space-y-4">
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Title *</label><input id="ann-title" type="text" class="input-field" placeholder="Announcement title"></div>
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Content *</label><textarea id="ann-content" class="input-field" rows="4" placeholder="Announcement details..."></textarea></div>
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Type</label>
+        <select id="ann-type" class="input-field">
+          <option value="general">General</option><option value="exam">Exam</option>
+          <option value="placement">Placement</option><option value="resource">Resource</option>
+        </select>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button class="btn-secondary flex-1" onclick="closeModal('announcement-modal')">Cancel</button>
+        <button class="btn-primary flex-1" onclick="submitAnnouncement()"><i class="fas fa-paper-plane mr-1"></i>Post</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Create Quiz Modal -->
+<div id="create-quiz-modal" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:650px">
+    <div class="flex items-center justify-between mb-5">
+      <h3 class="text-lg font-bold">🎯 Create Quiz</h3>
+      <button onclick="closeModal('create-quiz-modal')" style="color:#64748b"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="space-y-4">
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Quiz Title *</label><input id="cq-title" type="text" class="input-field" placeholder="e.g. Data Structures - Module 1"></div>
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Description</label><textarea id="cq-desc" class="input-field" rows="2" placeholder="Quiz description"></textarea></div>
+      <div class="grid grid-cols-3 gap-3">
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Branch</label>
+          <select id="cq-branch" class="input-field">
             <option value="CSE">CSE</option><option value="ISE">ISE</option><option value="ECE">ECE</option>
-            <option value="EEE">EEE</option><option value="ME">Mechanical</option><option value="CV">Civil</option>
+            <option value="EEE">EEE</option><option value="ME">ME</option><option value="CV">CV</option>
           </select>
         </div>
-        <div>
-          <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Semester</label>
-          <select id="res-semester" class="input-field">
-            <option value="">Select</option>
-            <option>1</option><option>2</option><option>3</option><option>4</option>
-            <option>5</option><option>6</option><option>7</option><option>8</option>
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Semester</label>
+          <select id="cq-semester" class="input-field">
+            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+            <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+            <option value="7">7</option><option value="8">8</option>
           </select>
         </div>
-        <div>
-          <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Subject (optional)</label>
-          <select id="res-subject" class="input-field"><option value="">Select Subject</option></select>
-        </div>
-        <div class="col-span-2">
-          <label class="block text-sm font-medium mb-2" style="color:#94a3b8">File URL * (Google Drive, OneDrive, etc.)</label>
-          <input type="url" id="res-url" class="input-field" placeholder="https://drive.google.com/file/..." required>
-        </div>
-        <div class="col-span-2">
-          <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Description</label>
-          <textarea id="res-desc" class="input-field" rows="2" placeholder="Brief description of the resource..."></textarea>
-        </div>
-        <div class="col-span-2 flex items-center gap-3">
-          <input type="checkbox" id="res-important" class="w-4 h-4">
-          <label for="res-important" style="color:#94a3b8;font-size:14px">Mark as Important</label>
-        </div>
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Duration (min)</label><input id="cq-duration" type="number" class="input-field" value="20" min="5" max="120"></div>
       </div>
-      <div class="flex gap-3">
-        <button type="submit" class="btn-primary flex-1"><i class="fas fa-upload mr-2"></i>Upload Resource</button>
-        <button type="button" onclick="closeModal('add-resource-modal')" class="btn-secondary flex-1">Cancel</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<div id="create-quiz-modal" class="modal-overlay">
-  <div class="modal" style="max-width:800px;max-height:90vh">
-    <div class="flex items-center justify-between mb-6">
-      <h3 class="text-xl font-bold gradient-text">Create Quiz</h3>
-      <button onclick="closeModal('create-quiz-modal')" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:20px"><i class="fas fa-times"></i></button>
-    </div>
-    <form id="create-quiz-form" onsubmit="handleCreateQuiz(event)">
-      <div class="grid grid-cols-2 gap-4 mb-4">
-        <div class="col-span-2">
-          <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Quiz Title *</label>
-          <input type="text" id="quiz-title" class="input-field" required>
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Branch</label>
-          <select id="quiz-branch" class="input-field">
-            <option value="CSE">CSE</option><option value="ISE">ISE</option><option value="ECE">ECE</option><option value="ME">Mechanical</option>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Difficulty</label>
+          <select id="cq-difficulty" class="input-field">
+            <option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option>
           </select>
         </div>
-        <div>
-          <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Difficulty</label>
-          <select id="quiz-difficulty" class="input-field">
-            <option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Duration (minutes)</label>
-          <input type="number" id="quiz-duration" class="input-field" value="20" min="5" max="120">
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-2" style="color:#94a3b8">Passing Score (%)</label>
-          <input type="number" id="quiz-passing" class="input-field" value="60" min="0" max="100">
-        </div>
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Passing Score (%)</label><input id="cq-passing" type="number" class="input-field" value="60" min="30" max="100"></div>
       </div>
-      <div id="quiz-questions-container">
-        <div class="flex items-center justify-between mb-3">
-          <h4 class="font-semibold" style="color:#e2e8f0">Questions</h4>
-          <button type="button" onclick="addQuizQuestion()" class="btn-primary" style="padding:6px 14px;font-size:13px"><i class="fas fa-plus mr-1"></i>Add Question</button>
-        </div>
-        <div id="questions-list"></div>
-      </div>
-      <div class="flex gap-3 mt-4">
-        <button type="submit" class="btn-primary flex-1"><i class="fas fa-save mr-2"></i>Create Quiz</button>
-        <button type="button" onclick="closeModal('create-quiz-modal')" class="btn-secondary flex-1">Cancel</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<div id="notifications-panel" class="modal-overlay">
-  <div style="position:fixed;right:0;top:0;height:100vh;width:380px;overflow-y:auto;padding:24px" class="glass">
-    <div class="flex items-center justify-between mb-6">
-      <h3 class="text-xl font-bold" style="color:#e2e8f0">Notifications</h3>
-      <div class="flex gap-2">
-        <button onclick="markAllRead()" style="font-size:12px;color:#818cf8;background:none;border:none;cursor:pointer">Mark all read</button>
-        <button onclick="closeModal('notifications-panel')" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:20px"><i class="fas fa-times"></i></button>
-      </div>
-    </div>
-    <div id="notifications-list"><div class="flex justify-center py-8"><div class="spinner"></div></div></div>
-  </div>
-</div>
-
-<!-- Search Results -->
-<div id="search-dropdown" style="position:fixed;top:60px;left:260px;z-index:1000;width:360px;border-radius:12px;display:none;max-height:400px;overflow-y:auto" class="card">
-  <div id="search-results" class="p-3"></div>
-</div>
-
-<!-- AI FAB -->
-<button id="ai-fab" onclick="navigate('ai-chat')" title="AI Study Assistant" style="display:none">
-  <i class="fas fa-robot" style="color:white;font-size:22px"></i>
-</button>
-
-<!-- PWA Install -->
-<div id="install-prompt" class="card p-4">
-  <div class="flex items-start gap-3">
-    <span style="font-size:28px">📱</span>
-    <div>
-      <div class="font-bold text-sm" style="color:#e2e8f0">Install VTU App</div>
-      <div style="font-size:12px;color:#64748b;margin:4px 0">Add to home screen for offline access</div>
-      <div class="flex gap-2 mt-2">
-        <button id="install-btn" class="btn-primary" style="padding:6px 14px;font-size:12px">Install</button>
-        <button onclick="document.getElementById('install-prompt').style.display='none'" style="background:none;border:none;color:#64748b;font-size:12px;cursor:pointer">Later</button>
+      <div class="flex gap-3 pt-2">
+        <button class="btn-secondary flex-1" onclick="closeModal('create-quiz-modal')">Cancel</button>
+        <button class="btn-primary flex-1" onclick="submitCreateQuiz()"><i class="fas fa-plus mr-1"></i>Create Quiz</button>
       </div>
     </div>
   </div>
 </div>
+
+<!-- Resource View Modal -->
+<div id="resource-modal" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:700px">
+    <div class="flex items-center justify-between mb-4">
+      <h3 id="res-modal-title" class="text-lg font-bold">Resource</h3>
+      <button onclick="closeModal('resource-modal')" style="color:#64748b"><i class="fas fa-times"></i></button>
+    </div>
+    <div id="res-modal-body"></div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
 
 <script src="/static/app.js"></script>
 </body>

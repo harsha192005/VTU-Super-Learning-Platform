@@ -1,2432 +1,1882 @@
-// ===== VTU SUPER LEARNING PLATFORM - Complete App JS =====
-'use strict';
+// ============================================================
+// VTU SUPER LEARNING PLATFORM - Complete Frontend App
+// ============================================================
 
-const API = '';
+const API = '/api';
 let currentUser = null;
 let currentPage = 'dashboard';
+let authToken = localStorage.getItem('vtu_token');
+let allBranches = [];
+let allSubjects = [];
+let allResources = [];
+let currentQuiz = null;
 let quizTimer = null;
-let quizState = {};
-let deferredInstallPrompt = null;
-let quizQuestionCount = 0;
+let quizAnswers = {};
+let currentQuestionIndex = 0;
+let chatHistory = [];
 
-// ===== API HELPER =====
-async function api(path, opts = {}) {
-  const token = localStorage.getItem('vtu_token');
-  const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', async () => {
+  if (authToken) {
+    try {
+      const res = await apiFetch('/auth/me');
+      if (res.user) {
+        currentUser = res.user;
+        showApp();
+        return;
+      }
+    } catch (e) {}
+  }
+  showLanding();
+});
+
+// ============================================================
+// SCREEN MANAGEMENT
+// ============================================================
+function showLanding() {
+  document.getElementById('landing-screen').style.display = 'block';
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'none';
+}
+
+function showAuth(tab) {
+  document.getElementById('landing-screen').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'block';
+  document.getElementById('app-screen').style.display = 'none';
+  switchAuthTab(tab || 'login');
+}
+
+function showApp() {
+  document.getElementById('landing-screen').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'block';
+  initApp();
+}
+
+function switchAuthTab(tab) {
+  document.getElementById('login-form').style.display = tab === 'login' ? 'block' : 'none';
+  document.getElementById('register-form').style.display = tab === 'register' ? 'block' : 'none';
+  document.querySelectorAll('#auth-screen .tab-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', (i === 0 && tab === 'login') || (i === 1 && tab === 'register'));
+  });
+}
+
+// ============================================================
+// API HELPER
+// ============================================================
+async function apiFetch(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+  if (opts.headers) Object.assign(headers, opts.headers);
+  const res = await fetch(API + path, { ...opts, headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+// ============================================================
+// AUTH
+// ============================================================
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  if (!email || !password) return showToast('Enter email and password', 'error');
   try {
-    const res = await fetch(API + path, { ...opts, headers: { ...headers, ...opts.headers } });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Request failed');
-    return data;
-  } catch (e) { throw e; }
-}
-
-// ===== TOAST =====
-function toast(msg, type = 'info') {
-  const icons = { success: 'check-circle', error: 'exclamation-circle', info: 'info-circle', warning: 'exclamation-triangle' };
-  const t = document.createElement('div');
-  t.className = `toast toast-${type}`;
-  t.innerHTML = `<i class="fas fa-${icons[type]}"></i><span>${msg}</span>`;
-  document.getElementById('toast-container').appendChild(t);
-  setTimeout(() => t.remove(), 4000);
-}
-
-// ===== THEME =====
-function toggleTheme() {
-  const html = document.documentElement;
-  const isDark = html.getAttribute('data-theme') === 'dark';
-  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
-  document.getElementById('theme-icon').className = isDark ? 'fas fa-sun w-5' : 'fas fa-moon w-5';
-  localStorage.setItem('vtu_theme', isDark ? 'light' : 'dark');
-}
-
-// ===== PAGE ROUTING =====
-function showPage(pageId) {
-  document.querySelectorAll('#auth-container .page').forEach(p => p.classList.remove('active'));
-  const page = document.getElementById(pageId);
-  if (page) page.classList.add('active');
-}
-
-function navigate(page) {
-  currentPage = page;
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.querySelectorAll(`.nav-item[onclick="navigate('${page}')"]`).forEach(n => n.classList.add('active'));
-  closeSidebar();
-  loadPage(page);
-}
-
-async function loadPage(page) {
-  const content = document.getElementById('page-content');
-  content.innerHTML = `<div class="flex items-center justify-center py-20"><div class="spinner"></div></div>`;
-  try {
-    switch (page) {
-      case 'dashboard': await renderDashboard(); break;
-      case 'subjects': await renderSubjects(); break;
-      case 'resources': await renderResources(); break;
-      case 'ai-chat': await renderAIChat(); break;
-      case 'quiz': await renderQuizList(); break;
-      case 'placement': await renderPlacement(); break;
-      case 'planner': await renderPlanner(); break;
-      case 'challenge': await renderDailyChallenge(); break;
-      case 'progress': await renderProgress(); break;
-      case 'leaderboard': await renderLeaderboard(); break;
-      case 'badges': await renderBadges(); break;
-      case 'bookmarks': await renderBookmarks(); break;
-      case 'exams': await renderExams(); break;
-      case 'announcements': await renderAnnouncements(); break;
-      case 'profile': await renderProfile(); break;
-      case 'notifications': await renderNotifications(); break;
-      // Admin pages
-      case 'admin-dashboard': await renderAdminDashboard(); break;
-      case 'admin-resources': await renderAdminResources(); break;
-      case 'admin-quizzes': await renderAdminQuizzes(); break;
-      case 'admin-users': await renderAdminUsers(); break;
-      case 'admin-announcements': await renderAdminAnnouncements(); break;
-      case 'admin-exams': await renderAdminExams(); break;
-      case 'admin-placement': await renderAdminPlacement(); break;
-      default: content.innerHTML = `<div class="empty-state"><div class="empty-icon">🚧</div><h3>Page not found</h3></div>`;
-    }
+    const data = await apiFetch('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+    authToken = data.token;
+    currentUser = data.user;
+    localStorage.setItem('vtu_token', authToken);
+    showToast('Welcome back, ' + currentUser.name + '! 🎉', 'success');
+    showApp();
   } catch (e) {
-    content.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3 style="color:#ef4444">Error loading page</h3><p style="color:#64748b;margin-top:8px">${e.message}</p><button onclick="loadPage('${page}')" class="btn-primary mt-4">Retry</button></div>`;
+    showToast(e.message, 'error');
   }
 }
 
-// ===== AUTH =====
-async function handleLogin(e) {
-  e.preventDefault();
-  const btn = document.getElementById('login-btn');
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Signing in...'; btn.disabled = true;
+async function doRegister() {
+  const name = document.getElementById('reg-name').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const password = document.getElementById('reg-password').value;
+  const branch = document.getElementById('reg-branch').value;
+  const semester = document.getElementById('reg-semester').value;
+  if (!name || !email || !password) return showToast('Fill all required fields', 'error');
   try {
-    const data = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ email: document.getElementById('login-email').value, password: document.getElementById('login-password').value }) });
-    localStorage.setItem('vtu_token', data.token);
+    const data = await apiFetch('/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, branch, semester: parseInt(semester) }) });
+    authToken = data.token;
     currentUser = data.user;
-    toast('Welcome back, ' + data.user.name + '! 🎓', 'success');
-    initApp();
-  } catch (e) { toast(e.message, 'error'); }
-  finally { btn.innerHTML = '<i class="fas fa-sign-in-alt mr-2"></i>Sign In'; btn.disabled = false; }
+    localStorage.setItem('vtu_token', authToken);
+    showToast('Account created! Welcome ' + currentUser.name + ' 🎓', 'success');
+    showApp();
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
 }
 
-async function handleRegister(e) {
-  e.preventDefault();
-  const pw = document.getElementById('reg-password').value;
-  const conf = document.getElementById('reg-confirm').value;
-  if (pw !== conf) { toast('Passwords do not match', 'error'); return; }
-  const btn = document.getElementById('reg-btn');
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...'; btn.disabled = true;
+async function demoLogin(role) {
   try {
-    const data = await api('/api/auth/register', { method: 'POST', body: JSON.stringify({
-      name: document.getElementById('reg-name').value, email: document.getElementById('reg-email').value,
-      password: pw, branch: document.getElementById('reg-branch').value, semester: document.getElementById('reg-semester').value
-    })});
-    localStorage.setItem('vtu_token', data.token);
+    const data = await apiFetch('/auth/demo-login', { method: 'POST', body: JSON.stringify({ role }) });
+    authToken = data.token;
     currentUser = data.user;
-    toast('Account created! Welcome to VTU Platform! 🎉', 'success');
-    initApp();
-  } catch (e) { toast(e.message, 'error'); }
-  finally { btn.innerHTML = '<i class="fas fa-user-plus mr-2"></i>Create Account'; btn.disabled = false; }
+    localStorage.setItem('vtu_token', authToken);
+    showToast('Demo login as ' + role + '! 🚀', 'success');
+    showApp();
+  } catch (e) {
+    showToast('Demo login failed: ' + e.message, 'error');
+  }
 }
 
-async function quickDemo(role) {
-  try {
-    const data = await api('/api/auth/demo-login', { method: 'POST', body: JSON.stringify({ role }) });
-    localStorage.setItem('vtu_token', data.token);
-    currentUser = data.user;
-    toast(`Demo ${role} account loaded! 🚀`, 'success');
-    initApp();
-  } catch (e) { toast('Demo login failed: ' + e.message + '. Make sure DB is seeded.', 'error'); }
-}
-
-function handleLogout() {
-  localStorage.removeItem('vtu_token');
+function doLogout() {
+  authToken = null;
   currentUser = null;
-  document.getElementById('main-app').style.display = 'none';
-  document.getElementById('auth-container').style.display = 'block';
-  document.getElementById('app').style.display = 'block';
-  document.getElementById('ai-fab').style.display = 'none';
-  showPage('landing-page');
-  toast('Logged out successfully', 'info');
+  localStorage.removeItem('vtu_token');
+  showLanding();
+  showToast('Logged out successfully', 'info');
 }
 
-function togglePassword(id) {
-  const input = document.getElementById(id);
-  input.type = input.type === 'password' ? 'text' : 'password';
+function togglePass(id) {
+  const el = document.getElementById(id);
+  el.type = el.type === 'password' ? 'text' : 'password';
 }
 
-// ===== SIDEBAR =====
-function toggleSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  const overlay = document.getElementById('sidebar-overlay');
-  sidebar.classList.toggle('open');
-  overlay.classList.toggle('active');
-  document.getElementById('sidebar-close').style.display = sidebar.classList.contains('open') ? 'block' : 'none';
-}
-function closeSidebar() {
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('sidebar-overlay').classList.remove('active');
-  document.getElementById('sidebar-close').style.display = 'none';
-}
-
-// ===== MODAL =====
-function closeModal(id) { document.getElementById(id).classList.remove('active'); }
-function openModal(id) { document.getElementById(id).classList.add('active'); }
-
-// ===== INIT APP =====
-async function initApp() {
-  document.getElementById('auth-container').style.display = 'none';
-  document.getElementById('main-app').style.display = 'block';
-  document.getElementById('ai-fab').style.display = 'flex';
+// ============================================================
+// APP INIT
+// ============================================================
+function initApp() {
+  buildSidebar();
   updateSidebarUser();
-  if (currentUser?.role === 'admin') {
-    document.getElementById('nav-student').style.display = 'none';
-    document.getElementById('nav-admin').style.display = 'block';
-    navigate('admin-dashboard');
-  } else {
-    navigate('dashboard');
-  }
+  showPage('dashboard');
   loadNotificationCount();
-  // Check badges in background
-  setTimeout(() => api('/api/gamification/check-badges', { method: 'POST' }).then(d => {
-    if (d.newly_earned?.length) d.newly_earned.forEach(b => toast(`🏆 Badge Unlocked: ${b.name}!`, 'success'));
-  }).catch(() => {}), 2000);
+  loadSubjectsForAI();
+}
+
+function buildSidebar() {
+  const isAdmin = currentUser?.role === 'admin';
+  document.getElementById('sidebar-role-badge').textContent = isAdmin ? '👑 Admin' : '🎓 Student';
+  document.getElementById('sidebar-role-badge').className = 'badge-pill text-xs mt-1 ' + (isAdmin ? 'badge-yellow' : 'badge-purple');
+
+  const studentNav = [
+    { icon: 'fa-home', label: 'Dashboard', page: 'dashboard' },
+    { icon: 'fa-code-branch', label: 'Branches', page: 'branches' },
+    { icon: 'fa-book', label: 'Subjects', page: 'subjects' },
+    { icon: 'fa-file-pdf', label: 'Resources', page: 'resources' },
+    { icon: 'fa-question-circle', label: 'Quizzes', page: 'quiz' },
+    { icon: 'fa-robot', label: 'AI Assistant', page: 'ai' },
+    { icon: 'fa-briefcase', label: 'Placement Prep', page: 'placement' },
+    { icon: 'fa-calendar-alt', label: 'Study Planner', page: 'planner' },
+    { icon: 'fa-fire', label: 'Daily Challenge', page: 'challenge' },
+    { icon: 'fa-trophy', label: 'Achievements', page: 'gamification' },
+    { icon: 'fa-chart-bar', label: 'Analytics', page: 'analytics' },
+    { icon: 'fa-clock', label: 'Exam Countdown', page: 'exams' },
+    { icon: 'fa-bullhorn', label: 'Announcements', page: 'announcements' },
+    { icon: 'fa-bell', label: 'Notifications', page: 'notifications' },
+  ];
+
+  const adminNav = [
+    { icon: 'fa-tachometer-alt', label: 'Admin Dashboard', page: 'dashboard' },
+    { icon: 'fa-users', label: 'Manage Users', page: 'admin-users' },
+    { icon: 'fa-file-pdf', label: 'Resources', page: 'resources' },
+    { icon: 'fa-question-circle', label: 'Quizzes', page: 'quiz' },
+    { icon: 'fa-bullhorn', label: 'Announcements', page: 'announcements' },
+    { icon: 'fa-chart-bar', label: 'Analytics', page: 'analytics' },
+    { icon: 'fa-clock', label: 'Exam Countdown', page: 'exams' },
+    { icon: 'fa-bell', label: 'Notifications', page: 'notifications' },
+    { icon: 'fa-code-branch', label: 'Branches', page: 'branches' },
+    { icon: 'fa-book', label: 'Subjects', page: 'subjects' },
+  ];
+
+  const navItems = isAdmin ? adminNav : studentNav;
+  const nav = document.getElementById('nav-menu');
+  nav.innerHTML = navItems.map(item => `
+    <div class="nav-item" id="nav-${item.page}" onclick="showPage('${item.page}')">
+      <i class="fas ${item.icon} w-5 text-center"></i>
+      <span>${item.label}</span>
+    </div>
+  `).join('');
+
+  if (isAdmin) {
+    const uploadBtn = document.getElementById('admin-upload-btn');
+    if (uploadBtn) uploadBtn.style.display = 'flex';
+    const createQuizBtn = document.getElementById('create-quiz-btn');
+    if (createQuizBtn) createQuizBtn.style.display = 'flex';
+    const annBtn = document.getElementById('add-announcement-btn');
+    if (annBtn) annBtn.style.display = 'flex';
+  }
 }
 
 function updateSidebarUser() {
   if (!currentUser) return;
-  const initials = currentUser.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?';
-  document.getElementById('sidebar-avatar').textContent = initials;
-  document.getElementById('topbar-avatar').textContent = initials;
-  document.getElementById('sidebar-name').textContent = currentUser.name || 'User';
-  document.getElementById('topbar-name').textContent = currentUser.name?.split(' ')[0] || 'User';
-  document.getElementById('sidebar-branch').textContent = currentUser.branch ? `${currentUser.branch} | Sem ${currentUser.semester}` : currentUser.role;
-  document.getElementById('user-role-badge').textContent = currentUser.role === 'admin' ? '🛡️ Admin' : '🎓 Student';
-  document.getElementById('sidebar-level').textContent = `Lv.${currentUser.level || 1}`;
-  document.getElementById('sidebar-streak').textContent = `🔥 ${currentUser.streak || 0}`;
-  document.getElementById('sidebar-points').textContent = `⭐ ${currentUser.points || 0}`;
+  const initial = currentUser.name ? currentUser.name[0].toUpperCase() : 'U';
+  document.getElementById('sidebar-avatar').textContent = initial;
+  document.getElementById('topbar-avatar').textContent = initial;
+  document.getElementById('sidebar-name').textContent = currentUser.name;
+  document.getElementById('sidebar-points').textContent = `⭐ ${currentUser.points || 0} pts · Lv ${currentUser.level || 1}`;
 }
 
-async function loadNotificationCount() {
-  try {
-    const data = await api('/api/notifications');
-    const count = data.unread_count || 0;
-    const dot = document.getElementById('notif-count');
-    if (count > 0) { dot.textContent = count > 9 ? '9+' : count; dot.style.display = 'flex'; }
-    else { dot.style.display = 'none'; }
-  } catch {}
-}
-
-// ===== SEARCH =====
-let searchTimeout;
-async function handleGlobalSearch(q) {
-  clearTimeout(searchTimeout);
-  const dropdown = document.getElementById('search-dropdown');
-  if (!q.trim()) { dropdown.style.display = 'none'; return; }
-  searchTimeout = setTimeout(async () => {
-    try {
-      const [resources, subjects] = await Promise.all([
-        api(`/api/resources?search=${encodeURIComponent(q)}&limit=5`),
-        api(`/api/subjects?search=${encodeURIComponent(q)}`)
-      ]);
-      const results = document.getElementById('search-results');
-      let html = '';
-      if (subjects.subjects?.length) {
-        html += `<div style="font-size:11px;font-weight:700;color:#64748b;padding:4px 8px;letter-spacing:1px">SUBJECTS</div>`;
-        subjects.subjects.slice(0, 3).forEach(s => { html += `<div onclick="navigate('subjects')" class="flex items-center gap-3 p-2 rounded-lg cursor-pointer hover:bg-indigo-500/10"><i class="fas fa-book text-indigo-400 text-sm"></i><span style="font-size:13px;color:#e2e8f0">${s.name}</span><span class="badge badge-primary" style="font-size:10px">${s.branch_code} Sem${s.semester}</span></div>`; });
-      }
-      if (resources.resources?.length) {
-        html += `<div style="font-size:11px;font-weight:700;color:#64748b;padding:4px 8px;letter-spacing:1px;margin-top:8px">RESOURCES</div>`;
-        resources.resources.slice(0, 4).forEach(r => { html += `<div onclick="openResourceModal(${r.id})" class="flex items-center gap-3 p-2 rounded-lg cursor-pointer hover:bg-indigo-500/10"><i class="fas fa-file-pdf text-purple-400 text-sm"></i><span style="font-size:13px;color:#e2e8f0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.title}</span><span class="badge badge-purple" style="font-size:10px">${r.type}</span></div>`; });
-      }
-      if (!html) html = `<div style="text-align:center;color:#64748b;padding:16px;font-size:13px">No results for "${q}"</div>`;
-      results.innerHTML = html;
-      dropdown.style.display = 'block';
-    } catch {}
-  }, 300);
-}
-document.addEventListener('click', e => {
-  if (!e.target.closest('#global-search') && !e.target.closest('#search-dropdown')) {
-    document.getElementById('search-dropdown').style.display = 'none';
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const main = document.getElementById('main-content');
+  if (window.innerWidth <= 768) {
+    sidebar.classList.toggle('open');
+  } else {
+    sidebar.classList.toggle('collapsed');
+    main.classList.toggle('expanded');
   }
-});
+}
 
-// ===== DASHBOARD =====
-async function renderDashboard() {
-  const data = await api('/api/users/dashboard');
-  const { profile, quizStats, progress, recentQuizzes, notifications, bookmarks, todayChallenge, exams, announcements } = data;
-  currentUser = { ...currentUser, ...profile };
-  updateSidebarUser();
-  const levelProgress = Math.min(100, Math.round(((profile.points - (profile.level - 1) * 500) / 500) * 100));
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <!-- Welcome banner -->
-      <div class="card p-6 mb-6" style="background:linear-gradient(135deg,#1e1b4b,#312e81);border-color:#4338ca">
-        <div class="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <div style="color:#a5b4fc;font-size:13px;margin-bottom:4px">Good ${getGreeting()},</div>
-            <h1 class="text-2xl font-black" style="color:#e2e8f0">Welcome back, ${profile.name?.split(' ')[0]} 👋</h1>
-            <div style="color:#94a3b8;margin-top:4px;font-size:14px">${profile.branch || 'Engineering'} • Semester ${profile.semester} • Keep learning!</div>
-            <div class="flex items-center gap-3 mt-4">
-              <div class="flex items-center gap-2">
-                <span style="font-size:13px;color:#a5b4fc">Level ${profile.level}</span>
-                <div style="width:120px;height:6px;background:rgba(255,255,255,0.1);border-radius:999px;overflow:hidden">
-                  <div style="width:${levelProgress}%;height:100%;background:linear-gradient(90deg,#6366f1,#8b5cf6);border-radius:999px"></div>
-                </div>
-                <span style="font-size:11px;color:#818cf8">${levelProgress}%</span>
+function showPage(page) {
+  currentPage = page;
+  // Hide all pages
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  // Show target
+  const target = document.getElementById('page-' + page);
+  if (target) target.classList.add('active');
+  // Update nav active
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const navItem = document.getElementById('nav-' + page);
+  if (navItem) navItem.classList.add('active');
+  // Update topbar
+  const titles = {
+    dashboard: ['Dashboard', 'Welcome back, ' + (currentUser?.name || 'User') + '!'],
+    branches: ['Branches', 'All VTU Engineering Branches'],
+    subjects: ['Subjects', 'Browse by Semester'],
+    resources: ['Resources', 'Study Materials & PDFs'],
+    quiz: ['Quizzes', 'Test Your Knowledge'],
+    ai: ['AI Assistant', 'Powered by AI'],
+    placement: ['Placement Prep', 'Aptitude, Coding & HR'],
+    planner: ['Study Planner', 'Organize Your Study Sessions'],
+    notifications: ['Notifications', 'Stay Updated'],
+    gamification: ['Achievements', 'Points, Badges & Leaderboard'],
+    exams: ['Exam Countdown', 'Upcoming VTU Exams'],
+    analytics: ['Analytics', 'Your Learning Progress'],
+    profile: ['Profile', 'Your Account'],
+    'admin-users': ['Manage Users', 'Admin Panel'],
+    announcements: ['Announcements', 'Latest Updates'],
+    challenge: ['Daily Challenge', 'Daily Practice Challenge'],
+  };
+  const [title, subtitle] = titles[page] || [page, ''];
+  document.getElementById('page-title').textContent = title;
+  document.getElementById('page-subtitle').textContent = subtitle;
+  // Close sidebar on mobile
+  if (window.innerWidth <= 768) {
+    document.getElementById('sidebar').classList.remove('open');
+  }
+  // Load page content
+  loadPage(page);
+}
+
+function loadPage(page) {
+  switch(page) {
+    case 'dashboard': loadDashboard(); break;
+    case 'branches': loadBranches(); break;
+    case 'subjects': loadSubjects(); break;
+    case 'resources': loadResources(); break;
+    case 'quiz': loadQuizList(); break;
+    case 'placement': loadPlacement(); break;
+    case 'planner': loadPlanner(); break;
+    case 'notifications': loadNotifications(); break;
+    case 'gamification': loadGamification(); break;
+    case 'exams': loadExams(); break;
+    case 'analytics': loadAnalytics(); break;
+    case 'profile': loadProfile(); break;
+    case 'admin-users': loadAdminUsers(); break;
+    case 'announcements': loadAnnouncements(); break;
+    case 'challenge': loadDailyChallenge(); break;
+  }
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+async function loadDashboard() {
+  const el = document.getElementById('dashboard-content');
+  const isAdmin = currentUser?.role === 'admin';
+  el.innerHTML = skeletonGrid(4, 80) + skeletonGrid(2, 160);
+
+  try {
+    if (isAdmin) {
+      await loadAdminDashboard(el);
+    } else {
+      await loadStudentDashboard(el);
+    }
+  } catch(e) {
+    el.innerHTML = errorBox(e.message);
+  }
+}
+
+async function loadStudentDashboard(el) {
+  const [analyticsData, quizzes, resources, challenges, exams] = await Promise.allSettled([
+    apiFetch('/analytics/student'),
+    apiFetch('/quiz?limit=3'),
+    apiFetch('/resources?limit=4'),
+    apiFetch('/challenge/today'),
+    apiFetch('/exams?limit=2'),
+  ]);
+
+  const stats = analyticsData.status === 'fulfilled' ? analyticsData.value : {};
+  const quizList = quizzes.status === 'fulfilled' ? quizzes.value.quizzes || [] : [];
+  const resList = resources.status === 'fulfilled' ? resources.value.resources || [] : [];
+  const challenge = challenges.status === 'fulfilled' ? challenges.value.challenge : null;
+  const examList = exams.status === 'fulfilled' ? exams.value.exams || [] : [];
+
+  el.innerHTML = `
+    <!-- Welcome Banner -->
+    <div class="card p-6 mb-6 relative overflow-hidden" style="background:linear-gradient(135deg,#1e1e3f,#2d1b69)">
+      <div class="absolute top-0 right-0 w-40 h-40 rounded-full opacity-10" style="background:#6366f1;transform:translate(20px,-20px)"></div>
+      <div class="flex items-center justify-between relative z-10">
+        <div>
+          <h2 class="text-2xl font-bold text-white">Welcome back, ${currentUser.name}! 👋</h2>
+          <p class="text-sm mt-1" style="color:#a5b4fc">${currentUser.branch || 'CSE'} · Semester ${currentUser.semester || 1} · Level ${currentUser.level || 1}</p>
+          <div class="flex items-center gap-4 mt-3">
+            <span class="badge-pill badge-purple">🔥 ${currentUser.streak || 0} day streak</span>
+            <span class="badge-pill badge-yellow">⭐ ${currentUser.points || 0} points</span>
+          </div>
+        </div>
+        <div class="hidden md:block text-7xl opacity-80">🎓</div>
+      </div>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="stat-card"><div class="text-2xl mb-1">📚</div><div class="text-2xl font-bold text-primary-400">${stats.total_resources || 0}</div><div class="text-xs mt-1" style="color:#64748b">Resources Viewed</div></div>
+      <div class="stat-card"><div class="text-2xl mb-1">🎯</div><div class="text-2xl font-bold text-green-400">${stats.quizzes_taken || 0}</div><div class="text-xs mt-1" style="color:#64748b">Quizzes Taken</div></div>
+      <div class="stat-card"><div class="text-2xl mb-1">📊</div><div class="text-2xl font-bold text-yellow-400">${stats.avg_score ? stats.avg_score.toFixed(0) : 0}%</div><div class="text-xs mt-1" style="color:#64748b">Avg Quiz Score</div></div>
+      <div class="stat-card"><div class="text-2xl mb-1">🏆</div><div class="text-2xl font-bold text-orange-400">${stats.badges_earned || 0}</div><div class="text-xs mt-1" style="color:#64748b">Badges Earned</div></div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+      <!-- Recent Quizzes -->
+      <div class="card p-5 lg:col-span-2">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-bold">🎯 Available Quizzes</h3>
+          <button class="text-xs text-primary-400 hover:underline" onclick="showPage('quiz')">View All →</button>
+        </div>
+        ${quizList.length ? quizList.map(q => `
+          <div class="flex items-center justify-between p-3 rounded-xl mb-2 cursor-pointer hover:bg-primary-500 hover:bg-opacity-10 transition-all" onclick="startQuiz(${q.id})" style="background:rgba(99,102,241,.05)">
+            <div>
+              <div class="font-medium text-sm">${q.title}</div>
+              <div class="text-xs mt-0.5" style="color:#64748b">${q.total_questions} questions · ${q.duration_minutes} min · <span class="capitalize">${q.difficulty}</span></div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="badge-pill ${q.difficulty==='easy'?'badge-green':q.difficulty==='hard'?'badge-red':'badge-yellow'}">${q.difficulty}</span>
+              <button class="btn-primary text-xs px-3 py-1">Take</button>
+            </div>
+          </div>
+        `).join('') : '<p class="text-sm text-center py-6" style="color:#64748b">No quizzes available yet</p>'}
+      </div>
+
+      <!-- Daily Challenge -->
+      <div class="card p-5">
+        <h3 class="font-bold mb-4">🔥 Daily Challenge</h3>
+        ${challenge ? `
+          <div class="exam-countdown-card mb-4">
+            <div class="text-2xl mb-2">⚡</div>
+            <div class="font-semibold text-sm">${challenge.title}</div>
+            <div class="badge-pill badge-yellow mt-2">+${challenge.points_reward} pts</div>
+          </div>
+          <button class="btn-primary w-full text-sm" onclick="showPage('challenge')">Take Challenge</button>
+        ` : `<p class="text-sm py-4 text-center" style="color:#64748b">No challenge today</p>`}
+        <div class="mt-4 pt-4 border-t" style="border-color:rgba(255,255,255,.07)">
+          <div class="flex items-center justify-between text-sm">
+            <span style="color:#94a3b8">Study Streak</span>
+            <span class="font-bold text-orange-400">🔥 ${currentUser.streak || 0} days</span>
+          </div>
+          <div class="progress-bar mt-2"><div class="progress-fill" style="width:${Math.min((currentUser.streak||0)*10,100)}%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Recent Resources -->
+      <div class="card p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-bold">📚 Recent Resources</h3>
+          <button class="text-xs text-primary-400 hover:underline" onclick="showPage('resources')">View All →</button>
+        </div>
+        ${resList.length ? resList.map(r => `
+          <div class="flex items-center gap-3 p-3 rounded-xl mb-2 cursor-pointer hover:bg-primary-500 hover:bg-opacity-10 transition-all" onclick="viewResource(${r.id},'${escHtml(r.title)}','${r.file_url||''}','${r.type}')" style="background:rgba(99,102,241,.05)">
+            <div class="text-xl">${resourceIcon(r.type)}</div>
+            <div class="overflow-hidden">
+              <div class="font-medium text-sm truncate">${r.title}</div>
+              <div class="text-xs" style="color:#64748b">${capitalizeFirst(r.type)} · Sem ${r.semester || '?'}</div>
+            </div>
+            ${r.is_important ? '<span class="badge-pill badge-red text-xs ml-auto">★ Key</span>' : ''}
+          </div>
+        `).join('') : '<p class="text-sm text-center py-6" style="color:#64748b">No resources yet</p>'}
+      </div>
+
+      <!-- Exam Countdown -->
+      <div class="card p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-bold">⏰ Upcoming Exams</h3>
+          <button class="text-xs text-primary-400 hover:underline" onclick="showPage('exams')">View All →</button>
+        </div>
+        ${examList.length ? examList.map(exam => {
+          const days = Math.max(0, Math.ceil((new Date(exam.exam_date) - new Date()) / 86400000));
+          return `
+          <div class="exam-countdown-card mb-3">
+            <div class="flex items-center justify-between">
+              <div class="text-left">
+                <div class="font-semibold text-sm">${exam.title}</div>
+                <div class="text-xs mt-0.5" style="color:#94a3b8">${exam.exam_date}</div>
               </div>
-              <span class="streak-badge">🔥 ${profile.streak} day streak</span>
-              <span class="level-badge">⭐ ${profile.points} pts</span>
+              <div class="text-right">
+                <div class="countdown-num">${days}</div>
+                <div class="text-xs" style="color:#94a3b8">days left</div>
+              </div>
             </div>
-          </div>
-          <div class="text-right">
-            <div style="font-size:48px">${profile.branch === 'CSE' ? '💻' : profile.branch === 'ECE' ? '📡' : profile.branch === 'ME' ? '⚙️' : '🎓'}</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Stats row -->
-      <div class="grid grid-cols-4 gap-4 mb-6">
-        <div class="card p-4">
-          <div class="flex items-center justify-between">
-            <div>
-              <div style="color:#64748b;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px">Quizzes Done</div>
-              <div class="text-3xl font-black mt-1" style="color:#6366f1">${quizStats?.total || 0}</div>
-            </div>
-            <div style="width:44px;height:44px;background:rgba(99,102,241,0.15);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px">🧪</div>
-          </div>
-        </div>
-        <div class="card p-4">
-          <div class="flex items-center justify-between">
-            <div>
-              <div style="color:#64748b;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px">Avg Score</div>
-              <div class="text-3xl font-black mt-1" style="color:#10b981">${quizStats?.avg_score || 0}%</div>
-            </div>
-            <div style="width:44px;height:44px;background:rgba(16,185,129,0.15);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px">📈</div>
-          </div>
-        </div>
-        <div class="card p-4">
-          <div class="flex items-center justify-between">
-            <div>
-              <div style="color:#64748b;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px">Subjects</div>
-              <div class="text-3xl font-black mt-1" style="color:#f59e0b">${progress?.length || 0}</div>
-            </div>
-            <div style="width:44px;height:44px;background:rgba(245,158,11,0.15);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px">📚</div>
-          </div>
-        </div>
-        <div class="card p-4">
-          <div class="flex items-center justify-between">
-            <div>
-              <div style="color:#64748b;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px">Points</div>
-              <div class="text-3xl font-black mt-1" style="color:#8b5cf6">${profile.points}</div>
-            </div>
-            <div style="width:44px;height:44px;background:rgba(139,92,246,0.15);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px">⭐</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-3 gap-6">
-        <!-- Left column (2/3) -->
-        <div class="col-span-2 space-y-6">
-          <!-- Today's Challenge -->
-          ${todayChallenge ? renderChallengeCard(todayChallenge) : ''}
-
-          <!-- Exam Countdown -->
-          ${exams?.length ? `<div class="card p-5">
-            <h3 class="font-bold mb-4 flex items-center gap-2" style="color:#e2e8f0"><i class="fas fa-clock text-red-400"></i> Upcoming Exams</h3>
-            <div class="space-y-3">
-              ${exams.map(ex => `<div class="flex items-center justify-between p-3 rounded-xl" style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2)">
-                <div><div class="font-semibold text-sm" style="color:#e2e8f0">${ex.title}</div><div style="color:#64748b;font-size:12px">${ex.description || ''}</div></div>
-                <div class="text-right">
-                  <div class="text-xl font-black" style="color:${ex.days_left <= 7 ? '#ef4444' : ex.days_left <= 30 ? '#f59e0b' : '#10b981'}">${ex.days_left}d</div>
-                  <div style="font-size:11px;color:#64748b">days left</div>
-                </div>
-              </div>`).join('')}
-            </div>
-          </div>` : ''}
-
-          <!-- Subject Progress -->
-          ${progress?.length ? `<div class="card p-5">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="font-bold" style="color:#e2e8f0"><i class="fas fa-chart-line text-blue-400 mr-2"></i>Study Progress</h3>
-              <button onclick="navigate('progress')" style="font-size:12px;color:#818cf8;background:none;border:none;cursor:pointer">View all →</button>
-            </div>
-            <div class="space-y-3">
-              ${progress.map(p => `<div>
-                <div class="flex justify-between items-center mb-1">
-                  <span style="font-size:13px;color:#e2e8f0">${p.subject_name}</span>
-                  <span style="font-size:12px;color:#64748b">${Math.round(p.completion_percentage)}%</span>
-                </div>
-                <div class="progress-bar"><div class="progress-fill" style="width:${p.completion_percentage}%"></div></div>
-              </div>`).join('')}
-            </div>
-          </div>` : ''}
-
-          <!-- Recent Quizzes -->
-          ${recentQuizzes?.length ? `<div class="card p-5">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="font-bold" style="color:#e2e8f0"><i class="fas fa-history text-purple-400 mr-2"></i>Recent Quizzes</h3>
-              <button onclick="navigate('quiz')" style="font-size:12px;color:#818cf8;background:none;border:none;cursor:pointer">Take more →</button>
-            </div>
-            <div class="space-y-2">
-              ${recentQuizzes.map(q => `<div class="flex items-center justify-between p-3 rounded-xl" style="background:rgba(255,255,255,0.03)">
-                <div>
-                  <div class="font-medium text-sm" style="color:#e2e8f0">${q.title}</div>
-                  <div style="font-size:11px;color:#64748b">${q.difficulty} • ${new Date(q.completed_at).toLocaleDateString()}</div>
-                </div>
-                <div class="badge ${q.percentage >= 70 ? 'badge-success' : q.percentage >= 50 ? 'badge-warning' : 'badge-danger'}">${q.percentage}%</div>
-              </div>`).join('')}
-            </div>
-          </div>` : `<div class="card p-5"><div class="empty-state" style="padding:24px"><div class="empty-icon">🧪</div><p style="color:#64748b">No quizzes taken yet</p><button onclick="navigate('quiz')" class="btn-primary mt-3" style="padding:8px 20px">Start a Quiz</button></div></div>`}
-        </div>
-
-        <!-- Right column (1/3) -->
-        <div class="space-y-4">
-          <!-- Announcements -->
-          ${announcements?.length ? `<div class="card p-4">
-            <h3 class="font-bold mb-3 text-sm" style="color:#e2e8f0"><i class="fas fa-bullhorn text-yellow-400 mr-2"></i>Announcements</h3>
-            ${announcements.map(a => `<div class="p-3 mb-2 rounded-lg" style="background:rgba(245,158,11,0.08);border-left:3px solid #f59e0b">
-              <div class="font-medium text-sm" style="color:#e2e8f0">${a.title}</div>
-              <div style="font-size:11px;color:#94a3b8;margin-top:2px">${a.content.slice(0, 80)}...</div>
-            </div>`).join('')}
-          </div>` : ''}
-
-          <!-- Quick Actions -->
-          <div class="card p-4">
-            <h3 class="font-bold mb-3 text-sm" style="color:#e2e8f0">Quick Actions</h3>
-            <div class="space-y-2">
-              <button onclick="navigate('quiz')" class="w-full text-left p-3 rounded-xl hover:bg-indigo-500/10 transition-all flex items-center gap-3" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2)">
-                <span style="font-size:18px">🧪</span><span style="font-size:13px;color:#a5b4fc;font-weight:600">Take a Quiz</span>
-              </button>
-              <button onclick="navigate('ai-chat')" class="w-full text-left p-3 rounded-xl hover:bg-purple-500/10 transition-all flex items-center gap-3" style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2)">
-                <span style="font-size:18px">🤖</span><span style="font-size:13px;color:#c4b5fd;font-weight:600">Ask AI Assistant</span>
-              </button>
-              <button onclick="navigate('resources')" class="w-full text-left p-3 rounded-xl hover:bg-green-500/10 transition-all flex items-center gap-3" style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2)">
-                <span style="font-size:18px">📚</span><span style="font-size:13px;color:#6ee7b7;font-weight:600">Browse Resources</span>
-              </button>
-              <button onclick="navigate('placement')" class="w-full text-left p-3 rounded-xl hover:bg-yellow-500/10 transition-all flex items-center gap-3" style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2)">
-                <span style="font-size:18px">💼</span><span style="font-size:13px;color:#fcd34d;font-weight:600">Placement Prep</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Bookmarks -->
-          ${bookmarks?.length ? `<div class="card p-4">
-            <div class="flex items-center justify-between mb-3">
-              <h3 class="font-bold text-sm" style="color:#e2e8f0"><i class="fas fa-bookmark text-indigo-400 mr-2"></i>Bookmarks</h3>
-              <button onclick="navigate('bookmarks')" style="font-size:11px;color:#818cf8;background:none;border:none;cursor:pointer">All →</button>
-            </div>
-            ${bookmarks.map(b => `<div class="flex items-center gap-2 p-2 rounded-lg cursor-pointer hover:bg-indigo-500/10" onclick="openResourceModal(${b.id})">
-              <i class="fas fa-file-alt" style="color:#818cf8;font-size:12px"></i>
-              <span style="font-size:12px;color:#94a3b8;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${b.title}</span>
-              <span class="badge badge-primary" style="font-size:10px">${b.type}</span>
-            </div>`).join('')}
-          </div>` : ''}
-        </div>
+          </div>`;
+        }).join('') : '<div class="exam-countdown-card text-center py-8"><div class="text-3xl mb-2">📅</div><div class="text-sm" style="color:#94a3b8">No upcoming exams</div></div>'}
       </div>
     </div>
   `;
 }
 
-function renderChallengeCard(challenge) {
-  const content = typeof challenge.content === 'string' ? JSON.parse(challenge.content) : challenge.content;
-  if (challenge.completed) {
-    return `<div class="card p-5" style="background:linear-gradient(135deg,rgba(16,185,129,0.1),rgba(5,150,105,0.05));border-color:rgba(16,185,129,0.3)">
-      <div class="flex items-center gap-3">
-        <span style="font-size:28px">✅</span>
-        <div><h3 class="font-bold" style="color:#10b981">Daily Challenge Completed!</h3>
-        <p style="color:#64748b;font-size:13px">Come back tomorrow for a new challenge. Keep your streak going! 🔥</p></div>
-      </div>
-    </div>`;
-  }
-  return `<div class="card p-5" style="background:linear-gradient(135deg,rgba(99,102,241,0.1),rgba(139,92,246,0.05));border-color:rgba(99,102,241,0.3)">
-    <div class="flex items-center justify-between mb-4">
-      <h3 class="font-bold flex items-center gap-2" style="color:#e2e8f0"><i class="fas fa-fire text-orange-400"></i> Daily Challenge</h3>
-      <span class="badge badge-warning">+${challenge.points_reward} pts</span>
+async function loadAdminDashboard(el) {
+  const [analyticsData, users] = await Promise.allSettled([
+    apiFetch('/analytics/admin'),
+    apiFetch('/users?limit=5'),
+  ]);
+
+  const stats = analyticsData.status === 'fulfilled' ? analyticsData.value : {};
+  const userList = users.status === 'fulfilled' ? (users.value.users || []) : [];
+
+  el.innerHTML = `
+    <div class="card p-6 mb-6" style="background:linear-gradient(135deg,#1e1e3f,#2d1b69)">
+      <h2 class="text-2xl font-bold text-white mb-1">👑 Admin Dashboard</h2>
+      <p style="color:#a5b4fc">Manage the VTU Super Learning Platform</p>
     </div>
-    <p class="font-medium mb-4" style="color:#c7d2fe;font-size:15px">${content.question}</p>
-    <div id="challenge-options" class="space-y-2">
-      ${content.options.map((opt, i) => `<button onclick="submitChallenge(${challenge.id}, ${i}, '${escHtml(content.explanation)}')" class="quiz-option w-full text-left text-sm" id="ch-opt-${i}">${String.fromCharCode(65+i)}. ${opt}</button>`).join('')}
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="stat-card"><div class="text-2xl mb-1">👥</div><div class="text-2xl font-bold text-primary-400">${stats.total_users || 0}</div><div class="text-xs mt-1" style="color:#64748b">Total Users</div></div>
+      <div class="stat-card"><div class="text-2xl mb-1">📚</div><div class="text-2xl font-bold text-green-400">${stats.total_resources || 0}</div><div class="text-xs mt-1" style="color:#64748b">Resources</div></div>
+      <div class="stat-card"><div class="text-2xl mb-1">🎯</div><div class="text-2xl font-bold text-yellow-400">${stats.total_quizzes || 0}</div><div class="text-xs mt-1" style="color:#64748b">Quizzes</div></div>
+      <div class="stat-card"><div class="text-2xl mb-1">📥</div><div class="text-2xl font-bold text-orange-400">${stats.total_downloads || 0}</div><div class="text-xs mt-1" style="color:#64748b">Downloads</div></div>
     </div>
-  </div>`;
-}
 
-function escHtml(str) { return String(str).replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
-
-async function submitChallenge(challengeId, answer, explanation) {
-  const btns = document.querySelectorAll('[id^="ch-opt-"]');
-  btns.forEach(b => b.disabled = true);
-  try {
-    const data = await api('/api/challenge/complete', { method: 'POST', body: JSON.stringify({ challenge_id: challengeId, answer }) });
-    const color = data.is_correct ? '#10b981' : '#ef4444';
-    const msg = data.is_correct ? `✅ Correct! +${data.points_earned} points` : `❌ Wrong! +${data.points_earned} points for trying`;
-    toast(msg, data.is_correct ? 'success' : 'warning');
-    document.getElementById('challenge-options').innerHTML += `<div style="margin-top:12px;padding:12px;border-radius:10px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2)"><p style="color:#a5b4fc;font-size:13px"><strong>Explanation:</strong> ${explanation}</p></div>`;
-    currentUser.points = (currentUser.points || 0) + data.points_earned;
-    updateSidebarUser();
-  } catch (e) { toast(e.message, 'error'); btns.forEach(b => b.disabled = false); }
-}
-
-// ===== SUBJECTS =====
-async function renderSubjects() {
-  const { branches: allBranches, grouped } = await api('/api/branches');
-  const branches = allBranches;
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <div class="flex items-center justify-between mb-6">
-        <div><h2 class="text-2xl font-black gradient-text">Browse Subjects</h2><p style="color:#64748b;margin-top:4px">All VTU branches and semesters</p></div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      <div class="card p-5">
+        <h3 class="font-bold mb-4">Quick Actions</h3>
+        <div class="grid grid-cols-2 gap-3">
+          <button class="card p-4 text-center cursor-pointer hover:border-primary-500" onclick="showUploadModal()"><div class="text-2xl mb-1">📤</div><div class="text-xs font-semibold">Upload Resource</div></button>
+          <button class="card p-4 text-center cursor-pointer hover:border-primary-500" onclick="showCreateQuizModal()"><div class="text-2xl mb-1">➕</div><div class="text-xs font-semibold">Create Quiz</div></button>
+          <button class="card p-4 text-center cursor-pointer hover:border-primary-500" onclick="showAddAnnouncementModal()"><div class="text-2xl mb-1">📢</div><div class="text-xs font-semibold">Announcement</div></button>
+          <button class="card p-4 text-center cursor-pointer hover:border-primary-500" onclick="showPage('admin-users')"><div class="text-2xl mb-1">👥</div><div class="text-xs font-semibold">Manage Users</div></button>
+        </div>
       </div>
-      <!-- Branch filter tabs -->
-      <div class="flex gap-2 mb-6 flex-wrap" id="branch-tabs">
-        <button class="tab active" onclick="filterBranch(null, this)">All Branches</button>
-        ${Object.keys(grouped).map(cat => `<button class="tab" onclick="filterBranch('${cat}', this)">${cat}</button>`).join('')}
-      </div>
-      <!-- Branches grid -->
-      <div class="grid grid-cols-3 gap-4" id="branches-grid">
-        ${branches.map(b => `
-          <div class="card p-5 cursor-pointer hover:border-indigo-500 transition-all" onclick="loadBranchDetail('${b.code}')">
-            <div class="flex items-center gap-3 mb-3">
-              <span style="font-size:28px">${b.icon}</span>
-              <div>
-                <div class="font-bold" style="color:#e2e8f0">${b.code}</div>
-                <div style="font-size:12px;color:#64748b">${b.category}</div>
-              </div>
+      <div class="card p-5">
+        <h3 class="font-bold mb-4">Recent Users</h3>
+        ${userList.map(u => `
+          <div class="flex items-center gap-3 p-2 rounded-lg mb-1">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">${u.name[0]}</div>
+            <div>
+              <div class="text-sm font-medium">${u.name}</div>
+              <div class="text-xs" style="color:#64748b">${u.branch} · Sem ${u.semester} · ${u.role}</div>
             </div>
-            <div class="font-medium text-sm mb-2" style="color:#c7d2fe">${b.name}</div>
-            <div style="font-size:12px;color:#64748b;line-height:1.5">${b.description}</div>
-            <div class="flex items-center justify-between mt-4 pt-3" style="border-top:1px solid rgba(255,255,255,0.05)">
-              <span style="font-size:12px;color:#64748b">${b.total_semesters} Semesters</span>
-              <button class="badge badge-primary" style="cursor:pointer">Explore →</button>
+          </div>
+        `).join('')}
+        <button class="btn-secondary w-full mt-3 text-sm" onclick="showPage('admin-users')">View All Users</button>
+      </div>
+    </div>
+  `;
+}
+
+// ============================================================
+// BRANCHES
+// ============================================================
+async function loadBranches() {
+  const el = document.getElementById('branches-content');
+  el.innerHTML = skeletonGrid(4, 100);
+  try {
+    const data = await apiFetch('/branches');
+    allBranches = data.branches || [];
+    renderBranches(allBranches);
+  } catch(e) {
+    el.innerHTML = errorBox(e.message);
+  }
+}
+
+function renderBranches(branches) {
+  const el = document.getElementById('branches-content');
+  const grouped = {};
+  branches.forEach(b => {
+    if (!grouped[b.category]) grouped[b.category] = [];
+    grouped[b.category].push(b);
+  });
+  if (!Object.keys(grouped).length) { el.innerHTML = '<p class="text-center py-12" style="color:#64748b">No branches found</p>'; return; }
+  el.innerHTML = Object.entries(grouped).map(([cat, list]) => `
+    <div class="mb-8">
+      <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><span class="w-2 h-6 rounded-full" style="background:#6366f1;display:inline-block"></span>${cat}</h3>
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        ${list.map(b => `
+          <div class="card p-5 cursor-pointer" onclick="selectBranch('${b.code}','${escHtml(b.name)}')">
+            <div class="text-3xl mb-3">${b.icon || '📚'}</div>
+            <div class="font-bold text-sm">${b.code}</div>
+            <div class="text-xs mt-1" style="color:#94a3b8">${b.name}</div>
+            <div class="text-xs mt-2" style="color:#64748b">${b.description ? b.description.substring(0,60)+'...' : ''}</div>
+            <div class="mt-3 flex gap-1 flex-wrap">
+              <span class="badge-pill badge-purple text-xs">${b.total_semesters || 8} Sems</span>
             </div>
           </div>
         `).join('')}
       </div>
-      <!-- Branch Detail -->
-      <div id="branch-detail" style="display:none;margin-top:24px"></div>
     </div>
-  `;
+  `).join('');
 }
 
-function filterBranch(category, btn) {
-  document.querySelectorAll('#branch-tabs .tab').forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
-  const cards = document.querySelectorAll('#branches-grid > div');
-  cards.forEach(card => {
-    const catEl = card.querySelector('div[style*="color:#64748b"]');
-    if (!category || catEl?.textContent === category) card.style.display = 'block';
-    else card.style.display = 'none';
+function filterBranches(q) {
+  const filtered = allBranches.filter(b =>
+    b.name.toLowerCase().includes(q.toLowerCase()) ||
+    b.code.toLowerCase().includes(q.toLowerCase()) ||
+    (b.category && b.category.toLowerCase().includes(q.toLowerCase()))
+  );
+  renderBranches(filtered);
+}
+
+function selectBranch(code, name) {
+  document.getElementById('subject-sem-filter').value = '';
+  sessionStorage.setItem('current_branch', code);
+  showPage('subjects');
+}
+
+// ============================================================
+// SUBJECTS
+// ============================================================
+async function loadSubjects() {
+  const el = document.getElementById('subjects-content');
+  el.innerHTML = skeletonGrid(6, 90);
+  const sem = document.getElementById('subject-sem-filter').value;
+  const branch = sessionStorage.getItem('current_branch') || (currentUser?.branch || 'CSE');
+  try {
+    let url = `/subjects?branch=${branch}`;
+    if (sem) url += `&semester=${sem}`;
+    const data = await apiFetch(url);
+    allSubjects = data.subjects || [];
+    renderSubjects(allSubjects, branch);
+  } catch(e) {
+    el.innerHTML = errorBox(e.message);
+  }
+}
+
+function renderSubjects(subjects, branch) {
+  const el = document.getElementById('subjects-content');
+  if (!subjects.length) { el.innerHTML = '<p class="text-center py-12" style="color:#64748b">No subjects found for this branch/semester</p>'; return; }
+
+  const bySem = {};
+  subjects.forEach(s => {
+    if (!bySem[s.semester]) bySem[s.semester] = [];
+    bySem[s.semester].push(s);
   });
-}
 
-async function loadBranchDetail(code) {
-  const detail = document.getElementById('branch-detail');
-  detail.style.display = 'block';
-  detail.innerHTML = `<div class="flex justify-center py-8"><div class="spinner"></div></div>`;
-  detail.scrollIntoView({ behavior: 'smooth' });
-  const data = await api(`/api/branches/${code}`);
-  const { branch, bySemester } = data;
-  detail.innerHTML = `
-    <div class="card p-6">
-      <div class="flex items-center justify-between mb-6">
-        <div class="flex items-center gap-3">
-          <span style="font-size:36px">${branch.icon}</span>
-          <div>
-            <h3 class="text-xl font-black" style="color:#e2e8f0">${branch.name}</h3>
-            <div style="color:#64748b;font-size:13px">${branch.description}</div>
-          </div>
-        </div>
-        <button onclick="document.getElementById('branch-detail').style.display='none'" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:20px"><i class="fas fa-times"></i></button>
-      </div>
-      <div id="sem-tabs" class="flex gap-2 mb-6 flex-wrap">
-        ${Object.keys(bySemester).map((sem, i) => `<button class="tab ${i===0?'active':''}" onclick="filterSem(${sem}, this)">Sem ${sem}</button>`).join('')}
-      </div>
-      ${Object.entries(bySemester).map(([sem, subjects], idx) => `
-        <div class="sem-block ${idx===0?'':'hidden'}" data-sem="${sem}">
-          <div class="grid grid-cols-2 gap-3">
-            ${subjects.map(s => `<div class="p-4 rounded-xl cursor-pointer hover:border-indigo-500 transition-all" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07)" onclick="loadSubjectDetail(${s.id}, '${escHtml(s.name)}')">
+  el.innerHTML = `
+    <div class="mb-4 p-3 card text-sm flex items-center gap-2">
+      <span class="font-medium">Branch:</span>
+      <span class="badge-pill badge-purple">${branch}</span>
+      <button class="ml-auto text-xs text-primary-400" onclick="showPage('branches')">← Change Branch</button>
+    </div>
+    ${Object.entries(bySem).sort(([a],[b]) => a-b).map(([sem, list]) => `
+      <div class="mb-6">
+        <h3 class="font-bold mb-3 text-base">📘 Semester ${sem}</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          ${list.map(s => `
+            <div class="card p-4 cursor-pointer" onclick="viewSubjectResources(${s.id},'${escHtml(s.name)}')">
               <div class="flex items-start justify-between">
                 <div>
-                  <div class="font-semibold text-sm" style="color:#e2e8f0">${s.name}</div>
-                  <div style="font-size:11px;color:#64748b;margin-top:2px">${s.code} • ${s.credits} Credits</div>
+                  <div class="font-semibold text-sm">${s.name}</div>
+                  <div class="text-xs mt-1" style="color:#6366f1">${s.code}</div>
+                  <div class="text-xs mt-1" style="color:#64748b">${s.credits || 4} Credits</div>
                 </div>
-                <span class="badge badge-primary" style="font-size:10px">Sem ${s.semester}</span>
+                <span class="badge-pill badge-blue text-xs">Sem ${s.semester}</span>
               </div>
-              ${s.description ? `<div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.5">${s.description}</div>` : ''}
-              <button class="mt-3 text-xs" style="color:#818cf8;background:none;border:none;cursor:pointer">View Resources →</button>
-            </div>`).join('')}
-          </div>
-        </div>
-      `).join('')}
-    </div>
-    <div id="subject-detail" style="margin-top:16px"></div>
-  `;
-}
-
-function filterSem(sem, btn) {
-  document.querySelectorAll('#sem-tabs .tab').forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
-  document.querySelectorAll('.sem-block').forEach(b => {
-    b.classList.toggle('hidden', b.dataset.sem !== String(sem));
-  });
-}
-
-async function loadSubjectDetail(id, name) {
-  const detail = document.getElementById('subject-detail');
-  if (!detail) return;
-  detail.innerHTML = `<div class="flex justify-center py-8"><div class="spinner"></div></div>`;
-  detail.scrollIntoView({ behavior: 'smooth' });
-  const { subject, resources, quizzes } = await api(`/api/subjects/${id}`);
-  const typeIcons = { notes: '📝', textbook: '📖', question_paper: '📋', lab_manual: '🔬', syllabus: '📄', video: '🎬' };
-  detail.innerHTML = `
-    <div class="card p-6">
-      <div class="flex items-center justify-between mb-6">
-        <div>
-          <h3 class="text-lg font-bold" style="color:#e2e8f0">${subject.name}</h3>
-          <div style="color:#64748b;font-size:13px">${subject.code} • ${subject.credits} Credits • ${subject.branch_name}</div>
-        </div>
-        <button onclick="document.getElementById('subject-detail').innerHTML=''" style="background:none;border:none;cursor:pointer;color:#64748b"><i class="fas fa-times"></i></button>
-      </div>
-      <div class="grid grid-cols-2 gap-6">
-        <div>
-          <h4 class="font-semibold mb-3 text-sm" style="color:#a5b4fc">📚 Resources (${resources.length})</h4>
-          ${resources.length ? resources.map(r => `<div class="flex items-center gap-3 p-3 rounded-xl mb-2 cursor-pointer hover:bg-indigo-500/10 resource-type-${r.type}" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07)" onclick="openResourceModal(${r.id})">
-            <span style="font-size:18px">${typeIcons[r.type] || '📄'}</span>
-            <div style="flex:1;min-width:0">
-              <div class="font-medium text-sm" style="color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.title}</div>
-              <div style="font-size:11px;color:#64748b">${r.type} • ${r.download_count} downloads</div>
+              ${s.description ? `<p class="text-xs mt-2" style="color:#94a3b8">${s.description.substring(0,80)}...</p>` : ''}
+              <div class="flex gap-2 mt-3">
+                <button class="btn-secondary text-xs py-1 px-2" onclick="event.stopPropagation();viewSubjectResources(${s.id},'${escHtml(s.name)}')"><i class="fas fa-file-pdf mr-1"></i>Resources</button>
+                <button class="btn-secondary text-xs py-1 px-2" onclick="event.stopPropagation();loadSubjectQuizzes(${s.id})"><i class="fas fa-question-circle mr-1"></i>Quiz</button>
+              </div>
             </div>
-            ${r.is_important ? '<span class="badge badge-warning" style="font-size:10px">⭐ Important</span>' : ''}
-          </div>`).join('') : `<div style="color:#64748b;font-size:13px;padding:16px;text-align:center">No resources yet</div>`}
-        </div>
-        <div>
-          <h4 class="font-semibold mb-3 text-sm" style="color:#a5b4fc">🧪 Quizzes (${quizzes.length})</h4>
-          ${quizzes.length ? quizzes.map(q => `<div class="p-3 rounded-xl mb-2 cursor-pointer hover:bg-indigo-500/10" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07)" onclick="startQuiz(${q.id}, '${escHtml(q.title)}')">
-            <div class="font-medium text-sm" style="color:#e2e8f0">${q.title}</div>
-            <div class="flex items-center gap-2 mt-1">
-              <span style="font-size:11px;color:#64748b">${q.question_count} questions • ${q.duration_minutes} min</span>
-              <span class="badge ${q.difficulty==='easy'?'badge-success':q.difficulty==='hard'?'badge-danger':'badge-warning'}" style="font-size:10px">${q.difficulty}</span>
-            </div>
-          </div>`).join('') : `<div style="color:#64748b;font-size:13px;padding:16px;text-align:center">No quizzes yet</div>`}
-          <button onclick="navigate('ai-chat')" class="btn-secondary w-full mt-3" style="padding:10px;font-size:13px"><i class="fas fa-robot mr-2"></i>Ask AI about ${subject.name}</button>
+          `).join('')}
         </div>
       </div>
-    </div>
+    `).join('')}
   `;
 }
 
-// ===== RESOURCES =====
-async function renderResources(branch = '', semester = '', type = '') {
-  const branchParam = branch || currentUser?.branch || '';
-  const semParam = semester || currentUser?.semester || '';
-  const data = await api(`/api/resources?branch=${branchParam}&semester=${semParam}&type=${type}&limit=30`);
-  const resources = data.resources || [];
-  const typeIcons = { notes: '📝', textbook: '📖', question_paper: '📋', lab_manual: '🔬', syllabus: '📄', video: '🎬', link: '🔗' };
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <div class="flex items-center justify-between mb-6">
-        <div><h2 class="text-2xl font-black gradient-text">Study Resources</h2><p style="color:#64748b;margin-top:4px">${data.total || resources.length} resources available</p></div>
-      </div>
-      <!-- Filters -->
-      <div class="card p-4 mb-6">
-        <div class="flex gap-3 flex-wrap">
-          <select class="input-field" style="flex:1;min-width:140px" id="filter-branch" onchange="applyResourceFilters()">
-            <option value="">All Branches</option>
-            <option value="CSE" ${branchParam==='CSE'?'selected':''}>CSE</option>
-            <option value="ISE" ${branchParam==='ISE'?'selected':''}>ISE</option>
-            <option value="AIML" ${branchParam==='AIML'?'selected':''}>AI & ML</option>
-            <option value="ECE" ${branchParam==='ECE'?'selected':''}>ECE</option>
-            <option value="ME" ${branchParam==='ME'?'selected':''}>Mechanical</option>
-            <option value="CV" ${branchParam==='CV'?'selected':''}>Civil</option>
-          </select>
-          <select class="input-field" style="flex:1;min-width:120px" id="filter-sem" onchange="applyResourceFilters()">
-            <option value="">All Semesters</option>
-            ${[1,2,3,4,5,6,7,8].map(s => `<option value="${s}" ${semParam==s?'selected':''}>Semester ${s}</option>`).join('')}
-          </select>
-          <select class="input-field" style="flex:1;min-width:140px" id="filter-type" onchange="applyResourceFilters()">
-            <option value="">All Types</option>
-            <option value="notes">📝 Notes</option>
-            <option value="textbook">📖 Textbooks</option>
-            <option value="question_paper">📋 Question Papers</option>
-            <option value="lab_manual">🔬 Lab Manuals</option>
-            <option value="syllabus">📄 Syllabus</option>
-            <option value="video">🎬 Videos</option>
-          </select>
-          <input type="text" class="input-field" style="flex:2;min-width:200px" id="filter-search" placeholder="Search resources..." oninput="applyResourceFilters()">
-        </div>
-      </div>
-      <!-- Resource Type Tabs -->
-      <div class="flex gap-2 mb-4 flex-wrap">
-        <button class="tab active" onclick="filterResourceType('', this)">All</button>
-        ${Object.entries(typeIcons).map(([t, ic]) => `<button class="tab" onclick="filterResourceType('${t}', this)">${ic} ${t.replace('_',' ')}</button>`).join('')}
-      </div>
-      <!-- Resources Grid -->
-      <div class="grid grid-cols-3 gap-4" id="resources-grid">
-        ${resources.length ? resources.map(r => renderResourceCard(r, typeIcons)).join('') : `<div class="col-span-3 empty-state"><div class="empty-icon">📂</div><h3 style="color:#e2e8f0">No resources found</h3><p style="color:#64748b">Try changing filters or check back later</p></div>`}
-      </div>
-    </div>
-  `;
+function viewSubjectResources(subjectId, subjectName) {
+  sessionStorage.setItem('filter_subject_id', subjectId);
+  sessionStorage.setItem('filter_subject_name', subjectName);
+  showPage('resources');
 }
 
-function renderResourceCard(r, typeIcons = {notes:'📝',textbook:'📖',question_paper:'📋',lab_manual:'🔬',syllabus:'📄',video:'🎬'}) {
-  return `<div class="card p-4 cursor-pointer resource-type-${r.type}" onclick="openResourceModal(${r.id})">
-    <div class="flex items-start justify-between mb-3">
-      <span style="font-size:24px">${typeIcons[r.type] || '📄'}</span>
-      <div class="flex gap-1">
-        ${r.is_important ? '<span class="badge badge-warning" style="font-size:10px">⭐</span>' : ''}
-        <span class="badge badge-primary" style="font-size:10px">${r.type}</span>
-      </div>
-    </div>
-    <h4 class="font-semibold text-sm mb-1" style="color:#e2e8f0;line-height:1.4">${r.title}</h4>
-    ${r.subject_name ? `<div style="font-size:11px;color:#818cf8;margin-bottom:4px">${r.subject_name}</div>` : ''}
-    ${r.description ? `<div style="font-size:11px;color:#64748b;margin-top:4px;line-height:1.4">${r.description.slice(0, 60)}${r.description.length > 60 ? '...' : ''}</div>` : ''}
-    <div class="flex items-center justify-between mt-4 pt-3" style="border-top:1px solid rgba(255,255,255,0.05)">
-      <div style="font-size:11px;color:#475569">
-        <i class="fas fa-download mr-1"></i>${r.download_count} <i class="fas fa-eye ml-2 mr-1"></i>${r.view_count}
-      </div>
-      <div class="flex gap-2">
-        <button onclick="event.stopPropagation();toggleBookmark(${r.id})" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:14px" title="Bookmark"><i class="fas fa-bookmark"></i></button>
-        <button onclick="event.stopPropagation();downloadResource(${r.id})" style="background:none;border:none;cursor:pointer;color:#818cf8;font-size:14px" title="Download"><i class="fas fa-download"></i></button>
-      </div>
-    </div>
-  </div>`;
+async function loadSubjectQuizzes(subjectId) {
+  sessionStorage.setItem('filter_quiz_subject', subjectId);
+  showPage('quiz');
 }
 
-async function applyResourceFilters() {
-  const branch = document.getElementById('filter-branch')?.value || '';
-  const sem = document.getElementById('filter-sem')?.value || '';
-  const type = document.getElementById('filter-type')?.value || '';
-  const search = document.getElementById('filter-search')?.value || '';
-  const data = await api(`/api/resources?branch=${branch}&semester=${sem}&type=${type}&search=${encodeURIComponent(search)}&limit=30`);
-  const typeIcons = { notes: '📝', textbook: '📖', question_paper: '📋', lab_manual: '🔬', syllabus: '📄', video: '🎬', link: '🔗' };
-  const grid = document.getElementById('resources-grid');
-  if (grid) grid.innerHTML = data.resources?.length ? data.resources.map(r => renderResourceCard(r, typeIcons)).join('') : `<div class="col-span-3 empty-state"><div class="empty-icon">📂</div><p style="color:#64748b">No resources found</p></div>`;
-}
+// ============================================================
+// RESOURCES
+// ============================================================
+async function loadResources() {
+  const el = document.getElementById('resources-content');
+  el.innerHTML = skeletonGrid(6, 100);
 
-function filterResourceType(type, btn) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('filter-type').value = type;
-  applyResourceFilters();
-}
+  const type = document.getElementById('res-type-filter').value;
+  const sem = document.getElementById('res-sem-filter').value;
+  const search = document.getElementById('res-search').value;
+  const subjectId = sessionStorage.getItem('filter_subject_id');
+  const subjectName = sessionStorage.getItem('filter_subject_name');
 
-async function openResourceModal(id) {
-  openModal('resource-modal');
-  document.getElementById('resource-modal-content').innerHTML = `<div class="flex justify-center py-8"><div class="spinner"></div></div>`;
+  let url = '/resources?limit=30';
+  if (type) url += `&type=${type}`;
+  if (sem) url += `&semester=${sem}`;
+  if (search) url += `&search=${encodeURIComponent(search)}`;
+  if (subjectId) url += `&subject_id=${subjectId}`;
+
   try {
-    const { resource } = await api(`/api/resources/${id}`);
-    const typeIcons = { notes: '📝', textbook: '📖', question_paper: '📋', lab_manual: '🔬', syllabus: '📄', video: '🎬' };
-    document.getElementById('resource-modal-title').textContent = resource.title;
-    document.getElementById('resource-modal-content').innerHTML = `
-      <div class="flex items-start gap-4 mb-6">
-        <span style="font-size:48px">${typeIcons[resource.type] || '📄'}</span>
-        <div>
-          <div class="flex gap-2 mb-2">
-            <span class="badge badge-primary">${resource.type}</span>
-            ${resource.is_important ? '<span class="badge badge-warning">⭐ Important</span>' : ''}
-            ${resource.branch_code ? `<span class="badge badge-purple">${resource.branch_code}</span>` : ''}
+    const data = await apiFetch(url);
+    allResources = data.resources || [];
+
+    let html = '';
+    if (subjectId && subjectName) {
+      html += `<div class="mb-4 p-3 card text-sm flex items-center gap-2">
+        <span>Showing resources for:</span><span class="badge-pill badge-purple">${subjectName}</span>
+        <button class="ml-auto text-xs text-primary-400" onclick="sessionStorage.removeItem('filter_subject_id');sessionStorage.removeItem('filter_subject_name');loadResources()">✕ Clear filter</button>
+      </div>`;
+    }
+
+    if (!allResources.length) {
+      html += '<div class="text-center py-16"><div class="text-5xl mb-3">📭</div><p style="color:#64748b">No resources found. Try adjusting filters.</p></div>';
+      el.innerHTML = html;
+      return;
+    }
+
+    html += `
+      <!-- Resource Type Tabs -->
+      <div class="flex gap-2 flex-wrap mb-5">
+        ${['all','notes','syllabus','textbook','question_paper','lab_manual','video'].map(t => `
+          <button class="tab-btn text-xs ${type===t||(!type&&t==='all')?'active':''}" onclick="document.getElementById('res-type-filter').value='${t==='all'?'':t}';loadResources()">${t==='all'?'All':capitalizeFirst(t.replace('_',' '))}</button>
+        `).join('')}
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        ${allResources.map(r => `
+          <div class="resource-card" onclick="viewResource(${r.id},'${escHtml(r.title)}','${r.file_url||''}','${r.type}')">
+            <div class="flex items-start gap-3">
+              <div class="text-3xl">${resourceIcon(r.type)}</div>
+              <div class="flex-1 overflow-hidden">
+                <div class="font-semibold text-sm leading-tight">${r.title}</div>
+                <div class="flex items-center gap-2 mt-1 flex-wrap">
+                  <span class="badge-pill badge-blue text-xs">${capitalizeFirst(r.type.replace('_',' '))}</span>
+                  ${r.semester ? `<span class="badge-pill badge-purple text-xs">Sem ${r.semester}</span>` : ''}
+                  ${r.is_important ? `<span class="badge-pill badge-red text-xs">★ Important</span>` : ''}
+                </div>
+                ${r.description ? `<p class="text-xs mt-2 line-clamp-2" style="color:#94a3b8">${r.description}</p>` : ''}
+                <div class="flex items-center gap-3 mt-3 text-xs" style="color:#64748b">
+                  <span><i class="fas fa-eye mr-1"></i>${r.view_count||0}</span>
+                  <span><i class="fas fa-download mr-1"></i>${r.download_count||0}</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex gap-2 mt-3">
+              <button class="btn-primary text-xs py-1 flex-1" onclick="event.stopPropagation();viewResource(${r.id},'${escHtml(r.title)}','${r.file_url||''}','${r.type}')"><i class="fas fa-eye mr-1"></i>View</button>
+              ${r.file_url ? `<button class="btn-secondary text-xs py-1 px-3" onclick="event.stopPropagation();downloadResource(${r.id},'${r.file_url}','${escHtml(r.title)}')"><i class="fas fa-download"></i></button>` : ''}
+              <button class="btn-secondary text-xs py-1 px-3" onclick="event.stopPropagation();toggleBookmark(${r.id},this)"><i class="fas fa-bookmark"></i></button>
+              ${currentUser?.role === 'admin' ? `<button class="btn-danger text-xs py-1 px-3" onclick="event.stopPropagation();deleteResource(${r.id})"><i class="fas fa-trash"></i></button>` : ''}
+            </div>
           </div>
-          <div style="color:#94a3b8;font-size:13px">${resource.subject_name || 'General Resource'} • ${resource.branch_code || ''} ${resource.semester ? 'Sem '+resource.semester : ''}</div>
-          ${resource.description ? `<p style="color:#94a3b8;font-size:14px;margin-top:8px;line-height:1.6">${resource.description}</p>` : ''}
-        </div>
-      </div>
-      <div class="grid grid-cols-3 gap-3 mb-6">
-        <div class="text-center p-3 rounded-xl" style="background:rgba(99,102,241,0.1)">
-          <div class="text-xl font-bold" style="color:#818cf8">${resource.download_count}</div>
-          <div style="font-size:11px;color:#64748b">Downloads</div>
-        </div>
-        <div class="text-center p-3 rounded-xl" style="background:rgba(16,185,129,0.1)">
-          <div class="text-xl font-bold" style="color:#10b981">${resource.view_count}</div>
-          <div style="font-size:11px;color:#64748b">Views</div>
-        </div>
-        <div class="text-center p-3 rounded-xl" style="background:rgba(245,158,11,0.1)">
-          <div class="text-xl font-bold" style="color:#f59e0b">${resource.uploader_name || 'Admin'}</div>
-          <div style="font-size:11px;color:#64748b">Uploaded by</div>
-        </div>
-      </div>
-      ${resource.type === 'video' ? `
-        <div class="mb-4">
-          <iframe src="${resource.file_url?.includes('youtube') ? resource.file_url.replace('watch?v=','embed/') : resource.file_url}" width="100%" height="300" frameborder="0" allowfullscreen style="border-radius:12px"></iframe>
-        </div>` : `
-        <div style="background:rgba(99,102,241,0.05);border:1px solid rgba(99,102,241,0.2);border-radius:12px;padding:16px;margin-bottom:16px">
-          <div style="font-size:13px;color:#a5b4fc;margin-bottom:8px"><i class="fas fa-file-pdf mr-2"></i>PDF Preview</div>
-          <p style="color:#64748b;font-size:13px">Click "Open PDF" to view in browser or "Download" to save.</p>
-        </div>`}
-      <div class="flex gap-3">
-        <a href="${resource.file_url}" target="_blank" class="btn-primary flex-1 text-center" style="text-decoration:none;padding:12px" onclick="downloadResource(${resource.id})">
-          <i class="fas fa-external-link-alt mr-2"></i>Open PDF
-        </a>
-        <button onclick="downloadResource(${resource.id})" class="btn-secondary flex-1" style="padding:12px">
-          <i class="fas fa-download mr-2"></i>Download (+5 pts)
-        </button>
-        <button onclick="toggleBookmark(${resource.id})" style="padding:12px 16px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);color:#fcd34d;border-radius:10px;cursor:pointer;font-weight:600">
-          <i class="fas fa-bookmark mr-1"></i>Bookmark
-        </button>
+        `).join('')}
       </div>
     `;
-  } catch(e) { document.getElementById('resource-modal-content').innerHTML = `<div style="color:#ef4444;padding:20px">${e.message}</div>`; }
-}
-
-async function downloadResource(id) {
-  try {
-    const data = await api(`/api/resources/${id}/download`, { method: 'POST' });
-    toast('+5 points earned for download! 📥', 'success');
-    if (data.file_url) window.open(data.file_url, '_blank');
-    currentUser.points = (currentUser.points || 0) + 5;
-    updateSidebarUser();
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-async function toggleBookmark(id) {
-  try {
-    const data = await api(`/api/resources/${id}/bookmark`, { method: 'POST' });
-    toast(data.bookmarked ? '🔖 Bookmarked!' : 'Bookmark removed', data.bookmarked ? 'success' : 'info');
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-// ===== AI CHAT =====
-let currentSessionId = null;
-let aiSessions = [];
-
-async function renderAIChat() {
-  const sessions = await api('/api/ai/sessions');
-  aiSessions = sessions.sessions || [];
-  document.getElementById('page-content').innerHTML = `
-    <div class="flex gap-4" style="height:calc(100vh - 120px)">
-      <!-- Sessions sidebar -->
-      <div class="card p-4" style="width:240px;flex-shrink:0;overflow-y:auto">
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="font-bold text-sm" style="color:#e2e8f0">💬 Chats</h3>
-          <button onclick="startNewChat()" class="badge badge-primary" style="cursor:pointer;font-size:11px">+ New</button>
-        </div>
-        <div id="sessions-list">
-          ${aiSessions.map(s => `<div onclick="loadSession(${s.id})" class="p-2 rounded-lg cursor-pointer hover:bg-indigo-500/10 mb-1" style="background:rgba(255,255,255,0.03)">
-            <div style="font-size:12px;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.title}</div>
-            <div style="font-size:10px;color:#64748b">${new Date(s.updated_at).toLocaleDateString()}</div>
-          </div>`).join('') || `<div style="color:#64748b;font-size:12px;text-align:center;padding:16px">No chats yet</div>`}
-        </div>
-      </div>
-      <!-- Chat area -->
-      <div class="card flex flex-col" style="flex:1;overflow:hidden">
-        <!-- Chat header -->
-        <div class="flex items-center justify-between p-4" style="border-bottom:1px solid rgba(255,255,255,0.05)">
-          <div class="flex items-center gap-3">
-            <div style="width:36px;height:36px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px">🤖</div>
-            <div>
-              <div class="font-bold text-sm" style="color:#e2e8f0">VTU AI Study Assistant</div>
-              <div style="font-size:11px;color:#10b981">● Online • Subject-aware AI</div>
-            </div>
-          </div>
-          <div class="flex gap-2">
-            <button onclick="generateQuestions()" class="badge badge-purple" style="cursor:pointer;padding:6px 12px">📝 Gen Questions</button>
-            <button onclick="startNewChat()" class="badge badge-primary" style="cursor:pointer;padding:6px 12px">+ New Chat</button>
-          </div>
-        </div>
-        <!-- Messages -->
-        <div id="chat-messages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px">
-          <div style="text-align:center;padding:40px 20px">
-            <div style="font-size:48px;margin-bottom:16px">🤖</div>
-            <h3 class="font-bold gradient-text text-lg">VTU AI Study Assistant</h3>
-            <p style="color:#64748b;font-size:14px;margin-top:8px;max-width:400px;margin-left:auto;margin-right:auto">Ask me anything about VTU subjects, exam preparation, placement tips, or get concept explanations with examples.</p>
-            <div class="grid grid-cols-2 gap-2 mt-6 max-w-md mx-auto">
-              ${['Explain Binary Trees with examples','Important questions for DBMS exam','How to prepare for TCS placement?','Study tips for VTU exams'].map(q => `<button onclick="sendSuggestion('${q}')" class="p-3 rounded-xl text-left text-sm hover:bg-indigo-500/20 transition-all" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.15);color:#a5b4fc">${q}</button>`).join('')}
-            </div>
-          </div>
-        </div>
-        <!-- Input -->
-        <div class="p-4" style="border-top:1px solid rgba(255,255,255,0.05)">
-          <div class="flex gap-3 items-end">
-            <div style="flex:1">
-              <textarea id="chat-input" class="input-field" rows="2" placeholder="Ask about any VTU subject, exam tips, placement prep..." style="resize:none" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
-            </div>
-            <div class="flex flex-col gap-2">
-              <button onclick="sendMessage()" class="btn-primary" style="padding:10px 18px">
-                <i class="fas fa-paper-plane"></i>
-              </button>
-              <button onclick="startVoiceInput()" id="voice-btn" style="padding:10px 18px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-radius:10px;cursor:pointer;color:#c4b5fd" title="Voice input">
-                <i class="fas fa-microphone"></i>
-              </button>
-            </div>
-          </div>
-          <div style="font-size:11px;color:#475569;margin-top:6px">Press Enter to send • Shift+Enter for new line • +3 pts per message</div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function sendSuggestion(text) {
-  document.getElementById('chat-input').value = text;
-  sendMessage();
-}
-
-async function sendMessage() {
-  const input = document.getElementById('chat-input');
-  const msg = input.value.trim();
-  if (!msg) return;
-  input.value = '';
-  input.style.height = 'auto';
-  appendMessage('user', msg);
-  const typing = appendTyping();
-  try {
-    const data = await api('/api/ai/chat', { method: 'POST', body: JSON.stringify({ message: msg, session_id: currentSessionId }) });
-    typing.remove();
-    appendMessage('assistant', data.response);
-    currentSessionId = data.session_id;
-    currentUser.points = (currentUser.points || 0) + 3;
-    updateSidebarUser();
-  } catch(e) { typing.remove(); appendMessage('assistant', '❌ Error: ' + e.message); }
-}
-
-function appendMessage(role, content) {
-  const container = document.getElementById('chat-messages');
-  const isUser = role === 'user';
-  const div = document.createElement('div');
-  div.style.cssText = `display:flex;gap:10px;${isUser ? 'flex-direction:row-reverse' : ''}`;
-  div.innerHTML = `
-    <div style="width:32px;height:32px;border-radius:50%;flex-shrink:0;${isUser ? 'background:linear-gradient(135deg,#6366f1,#8b5cf6)' : 'background:linear-gradient(135deg,#1e1b4b,#312e81);border:1px solid #4338ca'};display:flex;align-items:center;justify-content:center;font-size:14px">${isUser ? '👤' : '🤖'}</div>
-    <div style="max-width:75%;${isUser ? 'background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3)' : 'background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07)'};border-radius:${isUser ? '16px 4px 16px 16px' : '4px 16px 16px 16px'};padding:12px 16px">
-      ${isUser ? `<p style="color:#e2e8f0;font-size:14px;line-height:1.6">${content}</p>` : `<div class="markdown" style="font-size:14px;line-height:1.7;color:#c7d2fe">${marked.parse(content)}</div>`}
-    </div>
-  `;
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
-  return div;
-}
-
-function appendTyping() {
-  const container = document.getElementById('chat-messages');
-  const div = document.createElement('div');
-  div.style.cssText = 'display:flex;gap:10px';
-  div.innerHTML = `
-    <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#1e1b4b,#312e81);border:1px solid #4338ca;display:flex;align-items:center;justify-content:center;font-size:14px">🤖</div>
-    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:4px 16px 16px 16px;padding:14px 18px">
-      <div style="display:flex;gap:4px;align-items:center">
-        <span style="width:8px;height:8px;background:#6366f1;border-radius:50%;animation:pulse 1s infinite"></span>
-        <span style="width:8px;height:8px;background:#8b5cf6;border-radius:50%;animation:pulse 1s infinite 0.2s"></span>
-        <span style="width:8px;height:8px;background:#a78bfa;border-radius:50%;animation:pulse 1s infinite 0.4s"></span>
-      </div>
-    </div>`;
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
-  return div;
-}
-
-async function loadSession(id) {
-  const data = await api(`/api/ai/sessions/${id}`);
-  currentSessionId = id;
-  const container = document.getElementById('chat-messages');
-  container.innerHTML = '';
-  (data.session.messages || []).forEach(m => appendMessage(m.role, m.content));
-}
-
-function startNewChat() {
-  currentSessionId = null;
-  const container = document.getElementById('chat-messages');
-  container.innerHTML = `<div style="text-align:center;padding:40px 20px">
-    <div style="font-size:48px;margin-bottom:16px">🤖</div>
-    <h3 class="font-bold gradient-text text-lg">New Chat Started</h3>
-    <p style="color:#64748b;font-size:14px;margin-top:8px">What would you like to learn today?</p>
-  </div>`;
-}
-
-async function generateQuestions() {
-  const subject = prompt('Enter subject name (e.g., Data Structures):');
-  const topic = prompt('Enter specific topic (e.g., Binary Trees):');
-  if (!subject || !topic) return;
-  appendMessage('user', `Generate important questions for ${subject} - Topic: ${topic}`);
-  const typing = appendTyping();
-  try {
-    const data = await api('/api/ai/generate-questions', { method: 'POST', body: JSON.stringify({ subject, topic, difficulty: 'medium', count: 8 }) });
-    typing.remove();
-    const response = `## 📝 Important Questions: ${subject} - ${topic}\n\n${data.questions.map((q, i) => `**${i+1}.** ${q}`).join('\n\n')}`;
-    appendMessage('assistant', response);
-  } catch(e) { typing.remove(); appendMessage('assistant', '❌ ' + e.message); }
-}
-
-function startVoiceInput() {
-  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-    toast('Voice input not supported in this browser. Try Chrome.', 'warning'); return;
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = errorBox(e.message);
   }
-  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const recognition = new SpeechRec();
-  recognition.lang = 'en-IN';
-  recognition.onstart = () => { document.getElementById('voice-btn').style.color = '#ef4444'; toast('🎙️ Listening...', 'info'); };
-  recognition.onresult = e => { document.getElementById('chat-input').value = e.results[0][0].transcript; };
-  recognition.onend = () => { document.getElementById('voice-btn').style.color = '#c4b5fd'; };
-  recognition.start();
 }
 
-// ===== QUIZ =====
-async function renderQuizList() {
-  const data = await api(`/api/quiz?branch=${currentUser?.branch || ''}`);
-  const quizzes = data.quizzes || [];
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <div class="flex items-center justify-between mb-6">
-        <div><h2 class="text-2xl font-black gradient-text">Practice Quizzes</h2><p style="color:#64748b;margin-top:4px">${quizzes.length} quizzes available</p></div>
+function viewResource(id, title, url, type) {
+  // Track view
+  apiFetch(`/resources/${id}/view`, { method: 'POST' }).catch(() => {});
+
+  const body = document.getElementById('res-modal-body');
+  document.getElementById('res-modal-title').textContent = title;
+
+  let content = '';
+  if (type === 'video' && url) {
+    const youtubeId = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w-]+)/)?.[1];
+    content = youtubeId
+      ? `<div style="position:relative;padding-bottom:56.25%;height:0"><iframe src="https://www.youtube.com/embed/${youtubeId}" style="position:absolute;top:0;left:0;width:100%;height:100%" frameborder="0" allowfullscreen></iframe></div>`
+      : `<div class="text-center py-8"><a href="${url}" target="_blank" class="btn-primary"><i class="fas fa-external-link-alt mr-2"></i>Open Video</a></div>`;
+  } else if (url) {
+    content = `
+      <div class="mb-3 flex gap-2">
+        <a href="${url}" target="_blank" class="btn-primary text-sm"><i class="fas fa-external-link-alt mr-1"></i>Open PDF</a>
+        <button class="btn-secondary text-sm" onclick="downloadResource(${id},'${url}','${escHtml(title)}')"><i class="fas fa-download mr-1"></i>Download</button>
+        <button class="btn-secondary text-sm" onclick="toggleBookmark(${id},this)"><i class="fas fa-bookmark mr-1"></i>Bookmark</button>
       </div>
-      <!-- Filters -->
-      <div class="flex gap-3 mb-6 flex-wrap">
-        <select class="input-field" style="width:160px" id="q-difficulty" onchange="filterQuizzes()">
-          <option value="">All Difficulties</option>
-          <option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option>
-        </select>
-        <select class="input-field" style="width:160px" id="q-branch" onchange="filterQuizzes()">
-          <option value="">All Branches</option>
-          <option value="CSE">CSE</option><option value="ECE">ECE</option><option value="ME">Mechanical</option>
-        </select>
-      </div>
-      <div class="grid grid-cols-3 gap-4" id="quiz-grid">
-        ${quizzes.map(q => `
-          <div class="card p-5 cursor-pointer" onclick="startQuiz(${q.id}, '${escHtml(q.title)}')">
-            <div class="flex items-center justify-between mb-3">
-              <span class="badge ${q.difficulty==='easy'?'badge-success':q.difficulty==='hard'?'badge-danger':'badge-warning'}">${q.difficulty.toUpperCase()}</span>
-              <span style="font-size:11px;color:#64748b">${q.question_count} questions</span>
-            </div>
-            <h3 class="font-bold mb-2" style="color:#e2e8f0;font-size:15px">${q.title}</h3>
-            ${q.description ? `<p style="color:#64748b;font-size:12px;margin-bottom:12px">${q.description}</p>` : ''}
-            <div class="flex items-center gap-2 flex-wrap">
-              ${q.branch_code ? `<span class="badge badge-primary" style="font-size:10px">${q.branch_code}</span>` : ''}
-              ${q.semester ? `<span class="badge badge-purple" style="font-size:10px">Sem ${q.semester}</span>` : ''}
-              ${q.subject_name ? `<span class="badge badge-primary" style="font-size:10px">${q.subject_name}</span>` : ''}
-            </div>
-            <div class="flex items-center justify-between mt-4 pt-3" style="border-top:1px solid rgba(255,255,255,0.05)">
-              <span style="font-size:12px;color:#64748b"><i class="fas fa-clock mr-1"></i>${q.duration_minutes} min</span>
-              <span style="font-size:12px;color:#64748b">Pass: ${q.passing_score}%</span>
-              <button class="badge badge-primary" style="cursor:pointer">Start →</button>
-            </div>
-          </div>
-        `).join('') || `<div class="col-span-3 empty-state"><div class="empty-icon">🧪</div><h3 style="color:#e2e8f0">No quizzes yet</h3></div>`}
-      </div>
-      <!-- Recent attempts -->
-      <div class="mt-8">
-        <h3 class="font-bold mb-4 text-lg" style="color:#e2e8f0">Recent Attempts</h3>
-        <div id="quiz-attempts-list"></div>
-      </div>
-    </div>
-  `;
-  // Load attempts
-  api('/api/quiz/attempts/my').then(d => {
-    const list = document.getElementById('quiz-attempts-list');
-    if (!list) return;
-    if (!d.attempts?.length) { list.innerHTML = `<div style="color:#64748b;font-size:13px">No attempts yet</div>`; return; }
-    list.innerHTML = `<div class="grid grid-cols-2 gap-3">
-      ${d.attempts.map(a => `<div class="card p-4">
-        <div class="flex items-center justify-between">
-          <div><div class="font-medium text-sm" style="color:#e2e8f0">${a.quiz_title}</div>
-          <div style="font-size:11px;color:#64748b">${new Date(a.completed_at).toLocaleDateString()} • ${a.difficulty}</div></div>
-          <div class="badge ${a.percentage >= 70 ? 'badge-success' : a.percentage >= 50 ? 'badge-warning' : 'badge-danger'}">${a.percentage}%</div>
-        </div>
-      </div>`).join('')}
-    </div>`;
-  }).catch(() => {});
+      <div style="border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.1)">
+        <iframe src="https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true" style="width:100%;height:500px" frameborder="0">
+          <p class="p-4 text-sm">PDF preview not available. <a href="${url}" target="_blank" class="text-primary-400">Click here to open</a>.</p>
+        </iframe>
+      </div>`;
+  } else {
+    content = `<div class="text-center py-12"><div class="text-5xl mb-3">📄</div><p style="color:#64748b">No file attached to this resource</p></div>`;
+  }
+  body.innerHTML = content;
+  document.getElementById('resource-modal').style.display = 'flex';
 }
 
-async function filterQuizzes() {
-  const diff = document.getElementById('q-difficulty')?.value || '';
-  const branch = document.getElementById('q-branch')?.value || '';
-  const data = await api(`/api/quiz?difficulty=${diff}&branch=${branch}`);
-  const grid = document.getElementById('quiz-grid');
-  if (grid) grid.innerHTML = data.quizzes?.length ? data.quizzes.map(q => `<div class="card p-5 cursor-pointer" onclick="startQuiz(${q.id},'${escHtml(q.title)}')">
-    <div class="flex items-center justify-between mb-3"><span class="badge ${q.difficulty==='easy'?'badge-success':q.difficulty==='hard'?'badge-danger':'badge-warning'}">${q.difficulty}</span><span style="font-size:11px;color:#64748b">${q.question_count} questions</span></div>
-    <h3 class="font-bold mb-2" style="color:#e2e8f0">${q.title}</h3>
-    <div class="flex items-center justify-between mt-3 pt-3" style="border-top:1px solid rgba(255,255,255,0.05)"><span style="font-size:12px;color:#64748b"><i class="fas fa-clock mr-1"></i>${q.duration_minutes} min</span><button class="badge badge-primary" style="cursor:pointer">Start →</button></div>
-  </div>`).join('') : `<div class="col-span-3 empty-state"><div class="empty-icon">🧪</div><p style="color:#64748b">No quizzes found</p></div>`;
-}
-
-async function startQuiz(id, title) {
-  const data = await api(`/api/quiz/${id}`);
-  const { quiz, questions } = data;
-  if (!questions.length) { toast('No questions in this quiz', 'warning'); return; }
-  quizState = { id, questions, answers: {}, startTime: Date.now(), current: 0, duration: quiz.duration_minutes * 60 };
-  renderQuizPage(quiz, questions);
-}
-
-function renderQuizPage(quiz, questions) {
-  document.getElementById('page-content').innerHTML = `
-    <div class="max-w-3xl mx-auto">
-      <!-- Quiz header -->
-      <div class="card p-5 mb-6">
-        <div class="flex items-center justify-between">
-          <div>
-            <h2 class="text-xl font-bold" style="color:#e2e8f0">${quiz.title}</h2>
-            <div style="color:#64748b;font-size:13px">${quiz.total_questions} questions • Pass at ${quiz.passing_score}%</div>
-          </div>
-          <div class="text-center">
-            <div id="quiz-timer" class="text-2xl font-mono font-black" style="color:#f59e0b">${formatTime(quizState.duration)}</div>
-            <div style="font-size:11px;color:#64748b">remaining</div>
-          </div>
-        </div>
-        <!-- Progress -->
-        <div class="mt-4">
-          <div class="flex justify-between text-xs mb-1" style="color:#64748b">
-            <span>Question <span id="q-current">1</span> of ${questions.length}</span>
-            <span id="q-answered">0</span> answered
-          </div>
-          <div class="progress-bar"><div class="progress-fill" id="q-progress" style="width:${(1/questions.length)*100}%"></div></div>
-        </div>
-      </div>
-      <!-- Question -->
-      <div class="card p-6 mb-6" id="question-card">
-        ${renderQuestion(questions[0], 0)}
-      </div>
-      <!-- Navigation -->
-      <div class="flex items-center justify-between">
-        <button onclick="prevQuestion()" id="prev-btn" class="btn-secondary" disabled><i class="fas fa-arrow-left mr-2"></i>Previous</button>
-        <div class="flex gap-2 flex-wrap justify-center" id="q-nav">
-          ${questions.map((_, i) => `<button onclick="goToQuestion(${i})" id="qnav-${i}" class="w-8 h-8 rounded-lg font-bold text-sm transition-all" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8">${i+1}</button>`).join('')}
-        </div>
-        <button onclick="nextQuestion()" id="next-btn" class="btn-primary">${quizState.current === questions.length - 1 ? 'Submit Quiz' : 'Next <i class="fas fa-arrow-right ml-2"></i>'}</button>
-      </div>
-    </div>
-  `;
-  startQuizTimer();
-}
-
-function renderQuestion(q, idx) {
-  return `
-    <div class="font-bold mb-6" style="color:#c7d2fe;font-size:16px;line-height:1.6">
-      <span class="badge badge-primary mr-2" style="font-size:12px">Q${idx+1}</span>${q.question}
-    </div>
-    <div class="space-y-3">
-      ${['a','b','c','d'].map(opt => `
-        <div class="quiz-option ${quizState.answers[q.id] === opt ? 'selected' : ''}" id="opt-${q.id}-${opt}" onclick="selectAnswer(${q.id}, '${opt}', ${idx})">
-          <span class="font-bold mr-3" style="color:#818cf8">${opt.toUpperCase()}.</span>${q['option_'+opt]}
-        </div>
-      `).join('')}
-    </div>
-  `;
-}
-
-function selectAnswer(questionId, option, qIdx) {
-  quizState.answers[questionId] = option;
-  document.querySelectorAll(`[id^="opt-${questionId}-"]`).forEach(el => el.classList.remove('selected'));
-  document.getElementById(`opt-${questionId}-${option}`).classList.add('selected');
-  // Update nav button
-  const navBtn = document.getElementById(`qnav-${qIdx}`);
-  if (navBtn) { navBtn.style.background = 'rgba(99,102,241,0.3)'; navBtn.style.borderColor = '#6366f1'; navBtn.style.color = '#818cf8'; }
-  document.getElementById('q-answered').textContent = Object.keys(quizState.answers).length;
-}
-
-function nextQuestion() {
-  if (quizState.current === quizState.questions.length - 1) { submitQuiz(); return; }
-  quizState.current++;
-  updateQuestionDisplay();
-}
-function prevQuestion() {
-  if (quizState.current > 0) { quizState.current--; updateQuestionDisplay(); }
-}
-function goToQuestion(idx) {
-  quizState.current = idx;
-  updateQuestionDisplay();
-}
-function updateQuestionDisplay() {
-  const idx = quizState.current;
-  const q = quizState.questions[idx];
-  document.getElementById('question-card').innerHTML = renderQuestion(q, idx);
-  document.getElementById('q-current').textContent = idx + 1;
-  document.getElementById('q-progress').style.width = `${((idx+1)/quizState.questions.length)*100}%`;
-  document.getElementById('prev-btn').disabled = idx === 0;
-  const nextBtn = document.getElementById('next-btn');
-  nextBtn.innerHTML = idx === quizState.questions.length - 1 ? '<i class="fas fa-check mr-2"></i>Submit Quiz' : 'Next <i class="fas fa-arrow-right ml-2"></i>';
-  // Highlight current nav
-  document.querySelectorAll('#q-nav button').forEach((b, i) => { b.style.outline = i === idx ? '2px solid #6366f1' : 'none'; });
-}
-
-function startQuizTimer() {
-  if (quizTimer) clearInterval(quizTimer);
-  quizTimer = setInterval(() => {
-    quizState.duration--;
-    const timerEl = document.getElementById('quiz-timer');
-    if (!timerEl) { clearInterval(quizTimer); return; }
-    timerEl.textContent = formatTime(quizState.duration);
-    if (quizState.duration <= 60) timerEl.className = 'text-2xl font-mono font-black timer-critical';
-    if (quizState.duration <= 0) { clearInterval(quizTimer); submitQuiz(); }
-  }, 1000);
-}
-
-function formatTime(seconds) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-}
-
-async function submitQuiz() {
-  if (quizTimer) clearInterval(quizTimer);
-  const timeTaken = Math.round((Date.now() - quizState.startTime) / 1000);
-  document.getElementById('page-content').innerHTML = `<div class="flex justify-center py-20"><div class="spinner"></div><p style="color:#64748b;margin-left:16px">Submitting quiz...</p></div>`;
+async function downloadResource(id, url, title) {
   try {
-    const data = await api(`/api/quiz/${quizState.id}/submit`, { method: 'POST', body: JSON.stringify({ answers: quizState.answers, time_taken: timeTaken }) });
-    renderQuizResults(data);
-    toast(`Quiz submitted! You earned ${data.points_earned} points! 🎉`, 'success');
-    currentUser.points = (currentUser.points || 0) + data.points_earned;
-    updateSidebarUser();
-  } catch(e) { toast(e.message, 'error'); navigate('quiz'); }
+    await apiFetch(`/resources/${id}/download`, { method: 'POST' });
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = title + '.pdf';
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast('Download started!', 'success');
+  } catch(e) {
+    window.open(url, '_blank');
+  }
 }
 
-function renderQuizResults(data) {
-  const { score, totalMarks, percentage, points_earned, answers, questions } = data;
-  const passed = percentage >= 60;
-  document.getElementById('page-content').innerHTML = `
-    <div class="max-w-3xl mx-auto">
-      <div class="card p-8 text-center mb-6" style="background:linear-gradient(135deg,${passed ? 'rgba(16,185,129,0.1),rgba(5,150,105,0.05)' : 'rgba(239,68,68,0.1),rgba(220,38,38,0.05)'});border-color:${passed ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}">
-        <div style="font-size:64px;margin-bottom:16px">${passed ? '🏆' : '📚'}</div>
-        <h2 class="text-3xl font-black mb-2" style="color:${passed ? '#10b981' : '#ef4444'}">${percentage}%</h2>
-        <div style="color:#94a3b8;font-size:16px">${score}/${totalMarks} correct • ${passed ? 'PASSED! 🎉' : 'Keep practicing!'}</div>
-        <div class="flex justify-center gap-4 mt-6">
-          <div class="text-center"><div class="text-2xl font-black" style="color:#f59e0b">+${points_earned}</div><div style="color:#64748b;font-size:12px">Points Earned</div></div>
-          <div class="text-center"><div class="text-2xl font-black" style="color:#8b5cf6">${formatTime(Math.round((Date.now() - quizState.startTime) / 1000))}</div><div style="color:#64748b;font-size:12px">Time Taken</div></div>
-        </div>
-        <div class="flex gap-3 justify-center mt-6">
-          <button onclick="navigate('quiz')" class="btn-primary" style="padding:12px 28px">Take Another Quiz</button>
-          <button onclick="showQuizReview(${JSON.stringify(answers).replace(/'/g,"\\'")})" class="btn-secondary" style="padding:12px 28px">Review Answers</button>
-        </div>
-      </div>
-      <!-- Quick review -->
-      <div class="card p-5">
-        <h3 class="font-bold mb-4" style="color:#e2e8f0">Answer Summary</h3>
-        <div class="space-y-3">
-          ${(questions || []).map((q, i) => {
-            const userAns = answers.find(a => a.question_id === q.id);
-            return `<div class="p-3 rounded-xl flex items-center gap-3" style="background:${userAns?.is_correct ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)'}">
-              <span style="font-size:16px">${userAns?.is_correct ? '✅' : '❌'}</span>
-              <div style="flex:1"><div style="font-size:13px;color:#e2e8f0;font-weight:500">Q${i+1}: ${q.question.slice(0, 60)}...</div>
-              <div style="font-size:11px;color:#64748b">Your: ${userAns?.user_answer?.toUpperCase() || 'Skipped'} • Correct: ${q.correct_answer.toUpperCase()}</div></div>
-            </div>`;
-          }).join('')}
-        </div>
-        ${answers[0]?.explanation ? '' : ''}
-      </div>
-    </div>
-  `;
-}
-
-// ===== PLACEMENT =====
-async function renderPlacement() {
-  const categories = ['aptitude', 'coding', 'technical', 'hr'];
-  const catIcons = { aptitude: '🧮', coding: '💻', technical: '⚙️', hr: '🤝' };
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <div class="flex items-center justify-between mb-6">
-        <div><h2 class="text-2xl font-black gradient-text">Placement Preparation</h2><p style="color:#64748b;margin-top:4px">Comprehensive placement prep for VTU students</p></div>
-      </div>
-      <!-- Category tabs -->
-      <div class="flex gap-2 mb-6">
-        <button class="tab active" onclick="loadPlacementCategory('all', this)">🎯 All Questions</button>
-        ${categories.map(c => `<button class="tab" onclick="loadPlacementCategory('${c}', this)">${catIcons[c]} ${c.charAt(0).toUpperCase()+c.slice(1)}</button>`).join('')}
-        <button class="tab" onclick="loadCompanies(this)">🏢 Companies</button>
-        <button class="tab" onclick="loadRoadmap(this)">🗺️ Roadmap</button>
-      </div>
-      <div id="placement-content">
-        <div class="flex justify-center py-8"><div class="spinner"></div></div>
-      </div>
-    </div>
-  `;
-  loadPlacementCategory('all', document.querySelector('.tab.active'));
-}
-
-async function loadPlacementCategory(category, btn) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  btn?.classList.add('active');
-  const container = document.getElementById('placement-content');
-  container.innerHTML = `<div class="flex justify-center py-8"><div class="spinner"></div></div>`;
-  const data = await api(`/api/placement/questions?category=${category === 'all' ? '' : category}&limit=20`);
-  const questions = data.questions || [];
-  const diffColor = { easy: '#10b981', medium: '#f59e0b', hard: '#ef4444' };
-  container.innerHTML = `
-    <div class="mb-4 flex gap-2">
-      <input type="text" class="input-field" style="flex:1" placeholder="Search questions..." id="placement-search" oninput="searchPlacement(this.value, '${category}')">
-    </div>
-    <div class="space-y-4" id="placement-questions-list">
-      ${questions.map((q, i) => `
-        <div class="card p-5">
-          <div class="flex items-start justify-between gap-3 mb-3">
-            <h4 class="font-semibold" style="color:#e2e8f0;font-size:15px;line-height:1.5">${i+1}. ${q.question}</h4>
-            <div class="flex gap-2 flex-shrink-0">
-              <span class="badge" style="background:rgba(${diffColor[q.difficulty]},0.15);color:${diffColor[q.difficulty]};font-size:10px">${q.difficulty}</span>
-              <span class="badge badge-primary" style="font-size:10px">${q.category}</span>
-              ${q.company ? `<span class="badge badge-purple" style="font-size:10px">${q.company}</span>` : ''}
-            </div>
-          </div>
-          ${q.answer ? `<details>
-            <summary style="cursor:pointer;color:#818cf8;font-size:13px;font-weight:600">View Answer ▼</summary>
-            <div class="mt-3 p-3 rounded-xl" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2)">
-              <div class="markdown" style="font-size:13px;line-height:1.7;color:#c7d2fe">${marked.parse(q.answer)}</div>
-            </div>
-          </details>` : ''}
-        </div>
-      `).join('') || `<div class="empty-state"><div class="empty-icon">💼</div><p style="color:#64748b">No questions in this category</p></div>`}
-    </div>
-  `;
-}
-
-async function searchPlacement(q, category) {
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(async () => {
-    const data = await api(`/api/placement/questions?search=${encodeURIComponent(q)}&category=${category === 'all' ? '' : category}`);
-    const list = document.getElementById('placement-questions-list');
-    if (list) list.innerHTML = data.questions?.map((q, i) => `<div class="card p-5"><h4 class="font-semibold" style="color:#e2e8f0">${i+1}. ${q.question}</h4>${q.answer ? `<details><summary style="cursor:pointer;color:#818cf8;font-size:13px;margin-top:8px">View Answer</summary><div class="p-3 mt-2 rounded-xl" style="background:rgba(99,102,241,0.08)"><p style="color:#c7d2fe;font-size:13px">${q.answer}</p></div></details>` : ''}</div>`).join('') || `<div class="empty-state"><div class="empty-icon">🔍</div><p style="color:#64748b">No results</p></div>`;
-  }, 300);
-}
-
-async function loadCompanies(btn) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  btn?.classList.add('active');
-  const data = await api('/api/placement/companies');
-  const container = document.getElementById('placement-content');
-  const typeColor = { Service: '#10b981', Product: '#6366f1', 'Service': '#10b981' };
-  container.innerHTML = `<div class="grid grid-cols-2 gap-4">
-    ${data.companies?.map(c => `<div class="card p-5">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-lg font-black" style="color:#e2e8f0">${c.name}</h3>
-        <span class="badge ${c.type === 'Product' ? 'badge-primary' : 'badge-success'}">${c.type}</span>
-      </div>
-      <div class="flex items-center gap-2 mb-3">
-        <span class="badge badge-warning">${c.difficulty}</span>
-        <span style="font-size:13px;color:#10b981;font-weight:600">${c.package}</span>
-      </div>
-      <div class="mb-3">
-        <div style="font-size:11px;color:#64748b;margin-bottom:4px">Process:</div>
-        <div class="flex gap-1 flex-wrap">${c.process.map(p => `<span class="badge" style="background:rgba(255,255,255,0.05);color:#94a3b8;font-size:10px">${p}</span>`).join('')}</div>
-      </div>
-      <div>
-        <div style="font-size:11px;color:#64748b;margin-bottom:4px">Focus Areas:</div>
-        <div class="flex gap-1 flex-wrap">${c.focus.map(f => `<span class="badge badge-purple" style="font-size:10px">${f}</span>`).join('')}</div>
-      </div>
-    </div>`).join('')}
-  </div>`;
-}
-
-async function loadRoadmap(btn) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  btn?.classList.add('active');
-  const data = await api(`/api/placement/roadmap?branch=${currentUser?.branch || 'CSE'}`);
-  const container = document.getElementById('placement-content');
-  const roadmap = data.roadmap;
-  container.innerHTML = `<div>
-    <h3 class="text-xl font-bold mb-6" style="color:#e2e8f0">${roadmap?.title || 'Placement Roadmap'}</h3>
-    <div class="space-y-6">
-      ${roadmap?.phases?.map(p => `<div class="card p-5" style="border-left:4px solid #6366f1">
-        <div class="flex items-center gap-3 mb-4">
-          <div style="width:36px;height:36px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:bold;color:white">${p.phase}</div>
-          <div><div class="font-bold" style="color:#e2e8f0">${p.title}</div><div style="font-size:12px;color:#64748b">${p.duration}</div></div>
-        </div>
-        <div class="grid grid-cols-2 gap-4">
-          <div><div style="font-size:12px;color:#a5b4fc;font-weight:600;margin-bottom:6px">Topics</div>${p.topics.map(t => `<div style="font-size:12px;color:#94a3b8;padding:2px 0">• ${t}</div>`).join('')}</div>
-          <div><div style="font-size:12px;color:#a5b4fc;font-weight:600;margin-bottom:6px">Resources</div>${p.resources.map(r => `<div style="font-size:12px;color:#94a3b8;padding:2px 0">• ${r}</div>`).join('')}</div>
-        </div>
-      </div>`).join('') || '<div style="color:#64748b">No roadmap available</div>'}
-    </div>
-  </div>`;
-}
-
-// ===== STUDY PLANNER =====
-async function renderPlanner() {
-  const today = new Date().toISOString().split('T')[0];
-  const [plansData, summaryData, subjectsData] = await Promise.all([
-    api('/api/planner'),
-    api('/api/planner/summary'),
-    api(`/api/subjects?branch=${currentUser?.branch || ''}&semester=${currentUser?.semester || ''}`)
-  ]);
-  const plans = plansData.plans || [];
-  const summary = summaryData.summary || {};
-  const subjects = subjectsData.subjects || [];
-  const statusColors = { pending: '#f59e0b', completed: '#10b981', skipped: '#64748b' };
-  const priorityColors = { high: '#ef4444', medium: '#f59e0b', low: '#64748b' };
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <div class="flex items-center justify-between mb-6">
-        <div><h2 class="text-2xl font-black gradient-text">Study Planner</h2><p style="color:#64748b">Plan and track your study sessions</p></div>
-        <button onclick="showAddPlanModal('${JSON.stringify(subjects).replace(/'/g,"&#39;")}') " class="btn-primary"><i class="fas fa-plus mr-2"></i>Add Session</button>
-      </div>
-      <!-- Stats -->
-      <div class="grid grid-cols-4 gap-4 mb-6">
-        <div class="card p-4 text-center"><div class="text-2xl font-black" style="color:#6366f1">${summary.total || 0}</div><div style="font-size:12px;color:#64748b">Total Plans</div></div>
-        <div class="card p-4 text-center"><div class="text-2xl font-black" style="color:#10b981">${summary.completed || 0}</div><div style="font-size:12px;color:#64748b">Completed</div></div>
-        <div class="card p-4 text-center"><div class="text-2xl font-black" style="color:#ef4444">${summary.overdue || 0}</div><div style="font-size:12px;color:#64748b">Overdue</div></div>
-        <div class="card p-4 text-center"><div class="text-2xl font-black" style="color:#f59e0b">${Math.round((summary.total_minutes_planned || 0) / 60)}h</div><div style="font-size:12px;color:#64748b">Hours Planned</div></div>
-      </div>
-      <!-- Date filter -->
-      <div class="flex gap-3 mb-4">
-        <input type="date" class="input-field" style="width:180px" id="plan-date" value="${today}">
-        <select class="input-field" style="width:160px" id="plan-status" onchange="filterPlans()">
-          <option value="">All Status</option>
-          <option value="pending">Pending</option>
-          <option value="completed">Completed</option>
-          <option value="skipped">Skipped</option>
-        </select>
-        <button onclick="filterPlans()" class="btn-primary" style="padding:10px 18px">Filter</button>
-      </div>
-      <!-- Plans -->
-      <div class="space-y-3" id="plans-list">
-        ${plans.length ? plans.map(p => `
-          <div class="card p-4 flex items-center gap-4">
-            <div style="width:4px;height:60px;border-radius:2px;background:${priorityColors[p.priority] || '#64748b'}"></div>
-            <div style="flex:1">
-              <div class="flex items-center gap-2 mb-1">
-                <span class="font-semibold" style="color:#e2e8f0">${p.title}</span>
-                <span class="badge" style="font-size:10px;background:${p.status==='completed'?'rgba(16,185,129,0.15)':p.status==='skipped'?'rgba(100,116,139,0.15)':'rgba(245,158,11,0.15)'};color:${statusColors[p.status]}">${p.status}</span>
-              </div>
-              <div style="font-size:12px;color:#64748b">${p.subject_name || 'General'} • ${p.scheduled_date} • ${p.duration_minutes} min</div>
-              ${p.description ? `<div style="font-size:12px;color:#94a3b8;margin-top:2px">${p.description}</div>` : ''}
-            </div>
-            <div class="flex gap-2">
-              ${p.status === 'pending' ? `<button onclick="completePlan(${p.id})" class="btn-success" style="padding:6px 12px;font-size:12px">✓ Done</button>` : ''}
-              <button onclick="deletePlan(${p.id})" class="btn-danger" style="padding:6px 12px;font-size:12px"><i class="fas fa-trash"></i></button>
-            </div>
-          </div>
-        `).join('') : `<div class="empty-state"><div class="empty-icon">📅</div><h3 style="color:#e2e8f0">No study plans yet</h3><p style="color:#64748b">Add your first study session!</p></div>`}
-      </div>
-    </div>
-  `;
-}
-
-function showAddPlanModal(subjectsJson) {
-  const subjects = JSON.parse(subjectsJson.replace(/&#39;/g, "'"));
-  const form = `
-    <div class="card p-6" style="margin-top:16px">
-      <h3 class="font-bold mb-4" style="color:#e2e8f0">Add Study Session</h3>
-      <form onsubmit="addPlan(event)">
-        <div class="grid grid-cols-2 gap-3 mb-3">
-          <div class="col-span-2"><label class="block text-sm mb-1" style="color:#94a3b8">Title</label><input type="text" id="plan-title" class="input-field" placeholder="e.g., Study Data Structures - Module 3" required></div>
-          <div><label class="block text-sm mb-1" style="color:#94a3b8">Subject</label>
-            <select id="plan-subject" class="input-field"><option value="">Select subject</option>
-            ${subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}</select>
-          </div>
-          <div><label class="block text-sm mb-1" style="color:#94a3b8">Date</label><input type="date" id="plan-date-input" class="input-field" value="${new Date().toISOString().split('T')[0]}" required></div>
-          <div><label class="block text-sm mb-1" style="color:#94a3b8">Duration (min)</label><input type="number" id="plan-duration" class="input-field" value="60" min="15"></div>
-          <div><label class="block text-sm mb-1" style="color:#94a3b8">Priority</label>
-            <select id="plan-priority" class="input-field"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select>
-          </div>
-          <div class="col-span-2"><label class="block text-sm mb-1" style="color:#94a3b8">Notes</label><textarea id="plan-notes" class="input-field" rows="2" placeholder="What will you cover?"></textarea></div>
-        </div>
-        <div class="flex gap-3">
-          <button type="submit" class="btn-primary flex-1">Add Session +20 pts</button>
-          <button type="button" onclick="this.closest('div.card').remove()" class="btn-secondary">Cancel</button>
-        </div>
-      </form>
-    </div>`;
-  document.getElementById('plans-list').insertAdjacentHTML('beforebegin', form);
-}
-
-async function addPlan(e) {
-  e.preventDefault();
-  const body = { title: document.getElementById('plan-title').value, subject_id: document.getElementById('plan-subject').value || null, scheduled_date: document.getElementById('plan-date-input').value, duration_minutes: parseInt(document.getElementById('plan-duration').value), priority: document.getElementById('plan-priority').value, description: document.getElementById('plan-notes').value };
-  try { await api('/api/planner', { method: 'POST', body: JSON.stringify(body) }); toast('Study session added! +20 pts on completion!', 'success'); navigate('planner'); }
-  catch(e) { toast(e.message, 'error'); }
-}
-
-async function completePlan(id) {
-  try { await api(`/api/planner/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'completed' }) }); toast('Session completed! +20 pts! 🎉', 'success'); navigate('planner'); }
-  catch(e) { toast(e.message, 'error'); }
-}
-
-async function deletePlan(id) {
-  if (!confirm('Delete this plan?')) return;
-  try { await api(`/api/planner/${id}`, { method: 'DELETE' }); toast('Plan deleted', 'info'); navigate('planner'); }
-  catch(e) { toast(e.message, 'error'); }
-}
-
-async function filterPlans() {
-  const date = document.getElementById('plan-date')?.value || '';
-  const status = document.getElementById('plan-status')?.value || '';
-  const data = await api(`/api/planner?${date ? 'date='+date : ''}${status ? '&status='+status : ''}`);
-  const list = document.getElementById('plans-list');
-  if (!list) return;
-  const plans = data.plans || [];
-  const statusColors = { pending: '#f59e0b', completed: '#10b981', skipped: '#64748b' };
-  const priorityColors = { high: '#ef4444', medium: '#f59e0b', low: '#64748b' };
-  list.innerHTML = plans.length ? plans.map(p => `<div class="card p-4 flex items-center gap-4">
-    <div style="width:4px;height:60px;border-radius:2px;background:${priorityColors[p.priority]}"></div>
-    <div style="flex:1"><div class="font-semibold" style="color:#e2e8f0">${p.title}</div>
-    <div style="font-size:12px;color:#64748b">${p.scheduled_date} • ${p.duration_minutes} min</div></div>
-    <div class="flex gap-2">
-      ${p.status === 'pending' ? `<button onclick="completePlan(${p.id})" class="btn-success" style="padding:6px 12px;font-size:12px">✓</button>` : `<span class="badge" style="color:${statusColors[p.status]}">${p.status}</span>`}
-      <button onclick="deletePlan(${p.id})" class="btn-danger" style="padding:6px 12px;font-size:12px"><i class="fas fa-trash"></i></button>
-    </div>
-  </div>`).join('') : `<div class="empty-state"><div class="empty-icon">📅</div><p style="color:#64748b">No plans found</p></div>`;
-}
-
-// ===== DAILY CHALLENGE =====
-async function renderDailyChallenge() {
-  const [challengeData, historyData] = await Promise.all([
-    api('/api/challenge/today'),
-    api('/api/challenge/history')
-  ]);
-  const challenge = challengeData.challenge;
-  const history = historyData.history || [];
-  const content = challenge?.content ? (typeof challenge.content === 'string' ? JSON.parse(challenge.content) : challenge.content) : null;
-  document.getElementById('page-content').innerHTML = `
-    <div class="max-w-3xl mx-auto">
-      <div class="text-center mb-8">
-        <div style="font-size:48px;margin-bottom:8px">🔥</div>
-        <h2 class="text-3xl font-black gradient-text">Daily Challenge</h2>
-        <p style="color:#64748b;margin-top:8px">Complete the daily challenge to maintain your streak and earn bonus points!</p>
-      </div>
-      ${challenge && content ? `
-      <div class="card p-6 mb-6" style="background:linear-gradient(135deg,rgba(99,102,241,0.1),rgba(139,92,246,0.05));border-color:rgba(99,102,241,0.3)">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="font-bold text-lg" style="color:#e2e8f0">${challenge.title}</h3>
-          <div class="flex gap-2">
-            <span class="badge badge-warning">🔥 +${challenge.points_reward} pts</span>
-            <span class="badge badge-primary">${new Date().toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'short' })}</span>
-          </div>
-        </div>
-        ${challenge.completed ? `
-          <div class="text-center py-6">
-            <div style="font-size:48px">✅</div>
-            <h3 class="text-xl font-bold mt-3" style="color:#10b981">Challenge Completed!</h3>
-            <p style="color:#64748b;margin-top:8px">Great job! Come back tomorrow for a new challenge. 🚀</p>
-          </div>
-        ` : `
-          <p class="text-lg font-medium mb-6" style="color:#c7d2fe;line-height:1.6">${content.question}</p>
-          <div class="space-y-3" id="challenge-opts">
-            ${content.options.map((opt, i) => `
-              <button class="quiz-option w-full text-left" id="copt-${i}" onclick="submitDailyChallenge(${challenge.id}, ${i}, '${escHtml(content.explanation)}', ${content.correct})">
-                <span class="font-bold mr-3" style="color:#818cf8">${String.fromCharCode(65+i)}.</span>${opt}
-              </button>
-            `).join('')}
-          </div>
-        `}
-      </div>` : '<div class="card p-8 text-center"><div class="empty-icon">🔥</div><p style="color:#64748b">No challenge today yet</p></div>'}
-      <!-- History -->
-      <div class="card p-5">
-        <h3 class="font-bold mb-4" style="color:#e2e8f0">Challenge History</h3>
-        ${history.length ? `<div class="space-y-2">
-          ${history.map(h => `<div class="flex items-center justify-between p-3 rounded-xl" style="background:rgba(255,255,255,0.03)">
-            <span style="font-size:13px;color:#e2e8f0">${h.title}</span>
-            <div class="flex gap-2">
-              <span class="badge badge-success">+${h.points_earned} pts</span>
-              <span style="font-size:11px;color:#64748b">${new Date(h.completed_at).toLocaleDateString()}</span>
-            </div>
-          </div>`).join('')}
-        </div>` : `<div style="color:#64748b;font-size:13px">No history yet. Complete today's challenge!</div>`}
-      </div>
-    </div>
-  `;
-}
-
-async function submitDailyChallenge(id, answer, explanation, correct) {
-  document.querySelectorAll('[id^="copt-"]').forEach(b => b.disabled = true);
-  const data = await api('/api/challenge/complete', { method: 'POST', body: JSON.stringify({ challenge_id: id, answer }) });
-  const isCorrect = answer === correct;
-  document.querySelectorAll('[id^="copt-"]').forEach((b, i) => {
-    if (i === correct) b.classList.add('correct');
-    else if (i === answer && !isCorrect) b.classList.add('wrong');
-  });
-  document.getElementById('challenge-opts').insertAdjacentHTML('afterend', `
-    <div class="mt-4 p-4 rounded-xl" style="background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2)">
-      <div class="font-bold mb-2" style="color:${isCorrect ? '#10b981' : '#ef4444'}">${isCorrect ? '✅ Correct!' : '❌ Wrong!'} +${data.points_earned} points</div>
-      <p style="color:#a5b4fc;font-size:13px"><strong>Explanation:</strong> ${explanation}</p>
-    </div>`);
-  toast(isCorrect ? `✅ Correct! +${data.points_earned} pts!` : `Not quite! +${data.points_earned} pts for trying`, isCorrect ? 'success' : 'warning');
-  currentUser.points = (currentUser.points || 0) + data.points_earned;
-  updateSidebarUser();
-}
-
-// ===== PROGRESS =====
-async function renderProgress() {
-  const [progressData, analyticsData] = await Promise.all([
-    api('/api/users/progress'),
-    api('/api/analytics/student')
-  ]);
-  const progress = progressData.progress || [];
-  const analytics = analyticsData;
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <div class="flex items-center justify-between mb-6">
-        <div><h2 class="text-2xl font-black gradient-text">My Progress</h2><p style="color:#64748b">Track your learning journey</p></div>
-      </div>
-      <!-- Weekly stats -->
-      <div class="grid grid-cols-3 gap-4 mb-6">
-        <div class="card p-4 text-center"><div class="text-2xl font-black" style="color:#6366f1">${analytics.weeklyProgress?.today_quizzes || 0}</div><div style="font-size:12px;color:#64748b">Today's Quizzes</div></div>
-        <div class="card p-4 text-center"><div class="text-2xl font-black" style="color:#10b981">${analytics.weeklyProgress?.week_quizzes || 0}</div><div style="font-size:12px;color:#64748b">This Week</div></div>
-        <div class="card p-4 text-center"><div class="text-2xl font-black" style="color:#f59e0b">${analytics.weeklyProgress?.month_avg || 0}%</div><div style="font-size:12px;color:#64748b">30-Day Avg</div></div>
-      </div>
-      <!-- Subject performance -->
-      ${analytics.subjectPerformance?.length ? `<div class="card p-5 mb-6">
-        <h3 class="font-bold mb-4" style="color:#e2e8f0"><i class="fas fa-chart-bar text-blue-400 mr-2"></i>Subject Performance</h3>
-        <div class="space-y-3">
-          ${analytics.subjectPerformance.map(s => `
-            <div>
-              <div class="flex justify-between items-center mb-1">
-                <span style="font-size:13px;color:#e2e8f0">${s.subject_name || 'Unknown'} <span style="color:#64748b;font-size:11px">(${s.attempts} attempts)</span></span>
-                <span class="badge ${s.avg_score >= 70 ? 'badge-success' : s.avg_score >= 50 ? 'badge-warning' : 'badge-danger'}" style="font-size:11px">${s.avg_score}%</span>
-              </div>
-              <div class="progress-bar"><div class="progress-fill" style="width:${s.avg_score}%;background:${s.avg_score >= 70 ? 'linear-gradient(90deg,#10b981,#059669)' : s.avg_score >= 50 ? 'linear-gradient(90deg,#f59e0b,#d97706)' : 'linear-gradient(90deg,#ef4444,#dc2626)'}"></div></div>
-            </div>
-          `).join('')}
-        </div>
-      </div>` : ''}
-      <!-- Study progress -->
-      <div class="card p-5">
-        <h3 class="font-bold mb-4" style="color:#e2e8f0"><i class="fas fa-book text-green-400 mr-2"></i>Subject Study Progress</h3>
-        ${progress.length ? `<div class="space-y-3">
-          ${progress.map(p => `<div>
-            <div class="flex justify-between items-center mb-1">
-              <div>
-                <span style="font-size:13px;color:#e2e8f0;font-weight:500">${p.subject_name}</span>
-                <span class="badge badge-primary ml-2" style="font-size:10px">Sem ${p.semester}</span>
-              </div>
-              <div class="flex items-center gap-3">
-                <span style="font-size:11px;color:#64748b">${Math.round(p.total_time_minutes/60)}h studied</span>
-                <span style="font-size:13px;color:#94a3b8;font-weight:600">${Math.round(p.completion_percentage)}%</span>
-              </div>
-            </div>
-            <div class="progress-bar"><div class="progress-fill" style="width:${p.completion_percentage}%"></div></div>
-          </div>`).join('')}
-        </div>` : `<div class="empty-state" style="padding:24px"><div class="empty-icon">📊</div><p style="color:#64748b">No progress tracked yet</p><button onclick="navigate('subjects')" class="btn-primary mt-3" style="padding:8px 20px">Explore Subjects</button></div>`}
-      </div>
-    </div>
-  `;
-}
-
-// ===== LEADERBOARD =====
-async function renderLeaderboard() {
-  const data = await api('/api/gamification/leaderboard');
-  const leaderboard = data.leaderboard || [];
-  const myRank = leaderboard.findIndex(u => u.id === currentUser?.id) + 1;
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <div class="text-center mb-8">
-        <div style="font-size:48px;margin-bottom:8px">🏆</div>
-        <h2 class="text-3xl font-black gradient-text">Global Leaderboard</h2>
-        <p style="color:#64748b;margin-top:8px">Top performing VTU students</p>
-        ${myRank > 0 ? `<div class="badge badge-primary mt-3" style="font-size:14px;padding:8px 20px">Your Rank: #${myRank}</div>` : ''}
-      </div>
-      <!-- Top 3 -->
-      ${leaderboard.length >= 3 ? `<div class="flex items-end justify-center gap-6 mb-8">
-        <!-- 2nd place -->
-        <div class="text-center rank-2 p-4 rounded-2xl" style="margin-bottom:0;flex:1;max-width:180px">
-          <div style="font-size:32px;margin-bottom:8px">🥈</div>
-          <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:bold;color:white;margin:0 auto 8px">${(leaderboard[1]?.name||'?')[0]}</div>
-          <div class="font-bold text-sm" style="color:#e2e8f0">${leaderboard[1]?.name?.split(' ')[0]}</div>
-          <div style="font-size:12px;color:#64748b">${leaderboard[1]?.branch}</div>
-          <div class="font-black" style="color:#94a3b8;margin-top:4px">⭐ ${leaderboard[1]?.points}</div>
-        </div>
-        <!-- 1st place -->
-        <div class="text-center rank-1 p-5 rounded-2xl" style="flex:1;max-width:200px">
-          <div style="font-size:40px;margin-bottom:8px">👑</div>
-          <div style="width:68px;height:68px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#d97706);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:bold;color:white;margin:0 auto 8px">${(leaderboard[0]?.name||'?')[0]}</div>
-          <div class="font-bold" style="color:#e2e8f0">${leaderboard[0]?.name?.split(' ')[0]}</div>
-          <div style="font-size:12px;color:#64748b">${leaderboard[0]?.branch}</div>
-          <div class="font-black" style="color:#fbbf24;margin-top:4px">⭐ ${leaderboard[0]?.points}</div>
-        </div>
-        <!-- 3rd place -->
-        <div class="text-center rank-3 p-4 rounded-2xl" style="margin-bottom:0;flex:1;max-width:180px">
-          <div style="font-size:32px;margin-bottom:8px">🥉</div>
-          <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:bold;color:white;margin:0 auto 8px">${(leaderboard[2]?.name||'?')[0]}</div>
-          <div class="font-bold text-sm" style="color:#e2e8f0">${leaderboard[2]?.name?.split(' ')[0]}</div>
-          <div style="font-size:12px;color:#64748b">${leaderboard[2]?.branch}</div>
-          <div class="font-black" style="color:#b45309;margin-top:4px">⭐ ${leaderboard[2]?.points}</div>
-        </div>
-      </div>` : ''}
-      <!-- Full list -->
-      <div class="card p-4">
-        <div class="space-y-2">
-          ${leaderboard.map((u, i) => `
-            <div class="flex items-center gap-4 p-3 rounded-xl transition-all ${u.id === currentUser?.id ? 'border border-indigo-500 bg-indigo-500/10' : ''}" style="background:${u.id === currentUser?.id ? '' : 'rgba(255,255,255,0.02)'}">
-              <div class="w-8 text-center font-black" style="color:${i===0?'#fbbf24':i===1?'#94a3b8':i===2?'#b45309':'#64748b'};font-size:${i<3?'18px':'14px'}">${i<3?['🥇','🥈','🥉'][i]:'#'+(i+1)}</div>
-              <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;color:white;flex-shrink:0">${(u.name||'?')[0]}</div>
-              <div style="flex:1">
-                <div class="font-semibold text-sm" style="color:#e2e8f0">${u.name} ${u.id === currentUser?.id ? '<span class="badge badge-primary" style="font-size:10px">You</span>' : ''}</div>
-                <div style="font-size:11px;color:#64748b">${u.branch} • ${u.total_quizzes || 0} quizzes • ${u.avg_score || 0}% avg</div>
-              </div>
-              <div class="text-right">
-                <div class="font-bold" style="color:#f59e0b">⭐ ${u.points}</div>
-                <div style="font-size:11px;color:#64748b">Lv.${u.level} 🔥${u.streak}</div>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-// ===== BADGES =====
-async function renderBadges() {
-  const data = await api('/api/gamification/my-badges');
-  const { earned, locked } = data;
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <div class="text-center mb-8">
-        <div style="font-size:48px;margin-bottom:8px">🏅</div>
-        <h2 class="text-3xl font-black gradient-text">Achievement Badges</h2>
-        <p style="color:#64748b;margin-top:8px">${data.earned_count}/${data.total} badges earned</p>
-      </div>
-      <h3 class="font-bold mb-4 text-lg" style="color:#e2e8f0">Earned Badges 🎉</h3>
-      <div class="grid grid-cols-4 gap-4 mb-8">
-        ${earned.length ? earned.map(b => `<div class="card p-4 text-center" style="border-color:rgba(245,158,11,0.3);background:linear-gradient(135deg,rgba(245,158,11,0.1),rgba(217,119,6,0.05))">
-          <div style="font-size:40px;margin-bottom:8px">${b.icon || '🏅'}</div>
-          <div class="font-bold text-sm" style="color:#fbbf24">${b.name}</div>
-          <div style="font-size:11px;color:#64748b;margin-top:4px">${b.description}</div>
-          <div style="font-size:10px;color:#94a3b8;margin-top:6px">Earned ${new Date(b.earned_at).toLocaleDateString()}</div>
-        </div>`).join('') : `<div class="col-span-4 empty-state"><div class="empty-icon">🏅</div><p style="color:#64748b">No badges yet. Start quizzing!</p></div>`}
-      </div>
-      <h3 class="font-bold mb-4 text-lg" style="color:#e2e8f0">Locked Badges 🔒</h3>
-      <div class="grid grid-cols-4 gap-4">
-        ${locked.map(b => `<div class="card p-4 text-center" style="opacity:0.5">
-          <div style="font-size:40px;margin-bottom:8px;filter:grayscale(1)">🔒</div>
-          <div class="font-bold text-sm" style="color:#94a3b8">${b.name}</div>
-          <div style="font-size:11px;color:#64748b;margin-top:4px">${b.description}</div>
-          <div style="font-size:10px;color:#64748b;margin-top:6px">Requires: ${b.condition_value} ${b.condition_type}</div>
-        </div>`).join('')}
-      </div>
-    </div>
-  `;
-}
-
-// ===== BOOKMARKS =====
-async function renderBookmarks() {
-  const data = await api('/api/resources/bookmarks/my');
-  const bookmarks = data.bookmarks || [];
-  const typeIcons = { notes: '📝', textbook: '📖', question_paper: '📋', lab_manual: '🔬', syllabus: '📄', video: '🎬' };
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <div class="flex items-center justify-between mb-6">
-        <div><h2 class="text-2xl font-black gradient-text">My Bookmarks</h2><p style="color:#64748b">${bookmarks.length} saved resources</p></div>
-      </div>
-      <div class="grid grid-cols-3 gap-4">
-        ${bookmarks.length ? bookmarks.map(b => `<div class="card p-4 cursor-pointer resource-type-${b.type}" onclick="openResourceModal(${b.id})">
-          <div class="flex items-start justify-between mb-3">
-            <span style="font-size:24px">${typeIcons[b.type] || '📄'}</span>
-            <button onclick="event.stopPropagation();toggleBookmark(${b.id})" style="background:none;border:none;cursor:pointer;color:#f59e0b" title="Remove bookmark"><i class="fas fa-bookmark"></i></button>
-          </div>
-          <h4 class="font-semibold text-sm mb-1" style="color:#e2e8f0;line-height:1.4">${b.title}</h4>
-          <div class="flex items-center gap-2 mt-2">
-            <span class="badge badge-primary" style="font-size:10px">${b.type}</span>
-            <span style="font-size:11px;color:#64748b">Saved ${new Date(b.bookmarked_at).toLocaleDateString()}</span>
-          </div>
-        </div>`).join('') : `<div class="col-span-3 empty-state"><div class="empty-icon">🔖</div><h3 style="color:#e2e8f0">No bookmarks yet</h3><p style="color:#64748b">Bookmark resources to find them easily later</p><button onclick="navigate('resources')" class="btn-primary mt-4" style="padding:10px 24px">Browse Resources</button></div>`}
-      </div>
-    </div>
-  `;
-}
-
-// ===== EXAMS =====
-async function renderExams() {
-  const data = await api(`/api/exams?branch=${currentUser?.branch || ''}`);
-  const exams = data.exams || [];
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <div class="text-center mb-8">
-        <div style="font-size:48px;margin-bottom:8px">⏰</div>
-        <h2 class="text-3xl font-black gradient-text">Exam Countdown</h2>
-        <p style="color:#64748b;margin-top:8px">Stay ahead of your upcoming exams</p>
-      </div>
-      <div class="grid grid-cols-2 gap-6">
-        ${exams.length ? exams.map(ex => {
-          const days = ex.days_left;
-          const urgency = days <= 7 ? { color: '#ef4444', bg: 'rgba(239,68,68,0.1)', icon: '🔴' } : days <= 30 ? { color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', icon: '🟡' } : { color: '#10b981', bg: 'rgba(16,185,129,0.1)', icon: '🟢' };
-          return `<div class="card p-6" style="border-color:${urgency.color};background:${urgency.bg}">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="font-bold text-lg" style="color:#e2e8f0">${ex.title}</h3>
-              <span style="font-size:20px">${urgency.icon}</span>
-            </div>
-            <div class="text-5xl font-black text-center py-4" style="color:${urgency.color}">${days}</div>
-            <div class="text-center" style="color:#64748b;font-size:14px;margin-bottom:12px">days remaining</div>
-            <div style="font-size:13px;color:#94a3b8;text-align:center">${new Date(ex.exam_date).toLocaleDateString('en-IN', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}</div>
-            ${ex.description ? `<div style="font-size:12px;color:#64748b;margin-top:8px;text-align:center">${ex.description}</div>` : ''}
-            <div class="flex gap-2 justify-center mt-4">
-              <button onclick="navigate('resources')" class="btn-primary" style="padding:8px 16px;font-size:12px">Study Now</button>
-              <button onclick="navigate('planner')" class="btn-secondary" style="padding:8px 16px;font-size:12px">Plan</button>
-            </div>
-          </div>`;
-        }).join('') : `<div class="col-span-2 empty-state"><div class="empty-icon">📅</div><h3 style="color:#e2e8f0">No upcoming exams</h3><p style="color:#64748b">No exams scheduled currently</p></div>`}
-      </div>
-    </div>
-  `;
-}
-
-// ===== ANNOUNCEMENTS =====
-async function renderAnnouncements() {
-  const data = await api('/api/announcements');
-  const announcements = data.announcements || [];
-  const typeColors = { general: '#6366f1', exam: '#ef4444', placement: '#10b981', resource: '#f59e0b' };
-  const typeIcons = { general: '📢', exam: '📝', placement: '💼', resource: '📚' };
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <div class="flex items-center justify-between mb-6">
-        <div><h2 class="text-2xl font-black gradient-text">Announcements</h2><p style="color:#64748b">${announcements.length} announcements</p></div>
-      </div>
-      <div class="space-y-4">
-        ${announcements.length ? announcements.map(a => `<div class="card p-5" style="border-left:4px solid ${typeColors[a.type] || '#6366f1'}">
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <div class="flex items-center gap-2 mb-2">
-                <span style="font-size:18px">${typeIcons[a.type] || '📢'}</span>
-                <h3 class="font-bold" style="color:#e2e8f0">${a.title}</h3>
-                <span class="badge" style="background:rgba(${typeColors[a.type]},0.15);color:${typeColors[a.type]};font-size:10px">${a.type}</span>
-              </div>
-              <p style="color:#94a3b8;font-size:14px;line-height:1.7">${a.content}</p>
-              <div style="font-size:12px;color:#64748b;margin-top:8px">${a.author_name ? 'By '+a.author_name+' • ' : ''}${new Date(a.created_at).toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short', year:'numeric' })}</div>
-            </div>
-          </div>
-        </div>`).join('') : `<div class="empty-state"><div class="empty-icon">📢</div><h3 style="color:#e2e8f0">No announcements yet</h3></div>`}
-      </div>
-    </div>
-  `;
-}
-
-// ===== PROFILE =====
-async function renderProfile() {
-  const { profile, badges, quizStats, recentActivity } = await api('/api/users/profile');
-  document.getElementById('page-content').innerHTML = `
-    <div class="max-w-4xl mx-auto">
-      <!-- Profile header -->
-      <div class="card p-6 mb-6" style="background:linear-gradient(135deg,rgba(99,102,241,0.1),rgba(139,92,246,0.05))">
-        <div class="flex items-center gap-6">
-          <div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:bold;color:white;flex-shrink:0">${profile.name?.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}</div>
-          <div style="flex:1">
-            <h2 class="text-2xl font-black" style="color:#e2e8f0">${profile.name}</h2>
-            <div style="color:#818cf8;margin-top:2px">${profile.email}</div>
-            <div style="color:#64748b;font-size:13px;margin-top:4px">${profile.branch || 'Engineering'} • Semester ${profile.semester}</div>
-            ${profile.bio ? `<p style="color:#94a3b8;font-size:14px;margin-top:8px">${profile.bio}</p>` : ''}
-            <div class="flex items-center gap-3 mt-3">
-              <span class="level-badge">Level ${profile.level}</span>
-              <span class="streak-badge">🔥 ${profile.streak} day streak</span>
-              <span class="badge badge-primary">⭐ ${profile.points} points</span>
-              <span class="badge badge-success">🏅 ${badges?.length || 0} badges</span>
-            </div>
-          </div>
-          <button onclick="showEditProfile()" class="btn-secondary" style="padding:10px 20px"><i class="fas fa-edit mr-2"></i>Edit Profile</button>
-        </div>
-      </div>
-      <!-- Stats -->
-      <div class="grid grid-cols-3 gap-4 mb-6">
-        <div class="card p-4 text-center"><div class="text-2xl font-black" style="color:#6366f1">${quizStats?.total_quizzes || 0}</div><div style="font-size:12px;color:#64748b">Quizzes Taken</div></div>
-        <div class="card p-4 text-center"><div class="text-2xl font-black" style="color:#10b981">${quizStats?.avg_score || 0}%</div><div style="font-size:12px;color:#64748b">Average Score</div></div>
-        <div class="card p-4 text-center"><div class="text-2xl font-black" style="color:#f59e0b">${quizStats?.best_score || 0}%</div><div style="font-size:12px;color:#64748b">Best Score</div></div>
-      </div>
-      <!-- Recent badges -->
-      ${badges?.length ? `<div class="card p-5 mb-6">
-        <h3 class="font-bold mb-3" style="color:#e2e8f0">Recent Badges</h3>
-        <div class="flex gap-3 flex-wrap">
-          ${badges.slice(0,6).map(b => `<div class="text-center p-3 rounded-xl" style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2)">
-            <div style="font-size:24px">${b.icon || '🏅'}</div>
-            <div style="font-size:11px;color:#fbbf24;font-weight:600;margin-top:4px">${b.name}</div>
-          </div>`).join('')}
-        </div>
-      </div>` : ''}
-      <!-- Edit form (hidden) -->
-      <div id="edit-profile-form" style="display:none" class="card p-5 mb-6">
-        <h3 class="font-bold mb-4" style="color:#e2e8f0">Edit Profile</h3>
-        <form onsubmit="saveProfile(event)">
-          <div class="grid grid-cols-2 gap-3 mb-3">
-            <div><label class="block text-sm mb-1" style="color:#94a3b8">Full Name</label><input type="text" id="edit-name" class="input-field" value="${profile.name || ''}"></div>
-            <div><label class="block text-sm mb-1" style="color:#94a3b8">Branch</label>
-              <select id="edit-branch" class="input-field">
-                ${['CSE','ISE','AIML','ECE','EEE','ME','CV','CH','BT'].map(b => `<option value="${b}" ${profile.branch===b?'selected':''}>${b}</option>`).join('')}
-              </select>
-            </div>
-            <div><label class="block text-sm mb-1" style="color:#94a3b8">Semester</label>
-              <select id="edit-semester" class="input-field">
-                ${[1,2,3,4,5,6,7,8].map(s => `<option value="${s}" ${profile.semester==s?'selected':''}>${s}</option>`).join('')}
-              </select>
-            </div>
-            <div class="col-span-2"><label class="block text-sm mb-1" style="color:#94a3b8">Bio</label><textarea id="edit-bio" class="input-field" rows="2">${profile.bio || ''}</textarea></div>
-          </div>
-          <div class="flex gap-3">
-            <button type="submit" class="btn-primary flex-1">Save Changes</button>
-            <button type="button" onclick="document.getElementById('edit-profile-form').style.display='none'" class="btn-secondary flex-1">Cancel</button>
-          </div>
-        </form>
-        <!-- Change password -->
-        <div class="mt-4 pt-4" style="border-top:1px solid rgba(255,255,255,0.05)">
-          <h4 class="font-semibold mb-3 text-sm" style="color:#e2e8f0">Change Password</h4>
-          <form onsubmit="changePassword(event)">
-            <div class="grid grid-cols-3 gap-3">
-              <input type="password" id="curr-pw" class="input-field" placeholder="Current password">
-              <input type="password" id="new-pw" class="input-field" placeholder="New password">
-              <button type="submit" class="btn-primary">Update</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function showEditProfile() {
-  document.getElementById('edit-profile-form').style.display = 'block';
-  document.getElementById('edit-profile-form').scrollIntoView({ behavior: 'smooth' });
-}
-
-async function saveProfile(e) {
-  e.preventDefault();
+async function toggleBookmark(resourceId, btn) {
   try {
-    const data = await api('/api/users/profile', { method: 'PUT', body: JSON.stringify({
-      name: document.getElementById('edit-name').value,
-      branch: document.getElementById('edit-branch').value,
-      semester: parseInt(document.getElementById('edit-semester').value),
-      bio: document.getElementById('edit-bio').value
-    })});
-    currentUser = { ...currentUser, ...data.user };
-    updateSidebarUser();
-    toast('Profile updated successfully! ✅', 'success');
-    document.getElementById('edit-profile-form').style.display = 'none';
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-async function changePassword(e) {
-  e.preventDefault();
-  const curr = document.getElementById('curr-pw').value;
-  const newPw = document.getElementById('new-pw').value;
-  if (!curr || !newPw) { toast('Both passwords required', 'error'); return; }
-  try {
-    await api('/api/users/password', { method: 'PUT', body: JSON.stringify({ current_password: curr, new_password: newPw }) });
-    toast('Password changed successfully! 🔒', 'success');
-    document.getElementById('curr-pw').value = '';
-    document.getElementById('new-pw').value = '';
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-// ===== NOTIFICATIONS =====
-async function renderNotifications() {
-  navigate('notifications');
-}
-
-async function showNotifications() {
-  openModal('notifications-panel');
-  const data = await api('/api/notifications');
-  const list = document.getElementById('notifications-list');
-  const notifs = data.notifications || [];
-  const typeIcons = { info: '💡', success: '✅', warning: '⚠️', resource: '📚', quiz: '🧪' };
-  list.innerHTML = notifs.length ? notifs.map(n => `
-    <div class="p-3 mb-2 rounded-xl cursor-pointer ${n.is_read ? 'opacity-60' : ''}" style="background:${n.is_read ? 'rgba(255,255,255,0.02)' : 'rgba(99,102,241,0.08)'};border:1px solid ${n.is_read ? 'rgba(255,255,255,0.05)' : 'rgba(99,102,241,0.2)'}" onclick="markRead(${n.id},this)">
-      <div class="flex items-start gap-3">
-        <span style="font-size:18px">${typeIcons[n.type] || '📢'}</span>
-        <div>
-          <div class="font-semibold text-sm" style="color:#e2e8f0">${n.title}</div>
-          <div style="font-size:12px;color:#94a3b8;margin-top:2px">${n.message}</div>
-          <div style="font-size:11px;color:#64748b;margin-top:4px">${new Date(n.created_at).toLocaleDateString()}</div>
-        </div>
-        ${!n.is_read ? '<div style="width:8px;height:8px;border-radius:50%;background:#6366f1;flex-shrink:0;margin-top:4px"></div>' : ''}
-      </div>
-    </div>
-  `).join('') : `<div class="empty-state"><div class="empty-icon">🔔</div><p style="color:#64748b">No notifications</p></div>`;
-}
-
-async function markRead(id, el) {
-  await api(`/api/notifications/${id}/read`, { method: 'POST' }).catch(() => {});
-  el.style.opacity = '0.6';
-  el.style.background = 'rgba(255,255,255,0.02)';
-  el.style.borderColor = 'rgba(255,255,255,0.05)';
-  el.querySelector('[style*="border-radius:50%"]')?.remove();
-  loadNotificationCount();
-}
-
-async function markAllRead() {
-  await api('/api/notifications/read-all', { method: 'POST' });
-  document.querySelectorAll('#notifications-list [style*="border-radius:50%"]').forEach(el => el.remove());
-  toast('All notifications marked as read', 'success');
-  loadNotificationCount();
-}
-
-// ===== ADMIN DASHBOARD =====
-async function renderAdminDashboard() {
-  const data = await api('/api/analytics/admin');
-  const { stats, topResources, topStudents, branchStats, recentActivity } = data;
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <div class="flex items-center justify-between mb-6">
-        <div><h2 class="text-2xl font-black gradient-text">Admin Dashboard</h2><p style="color:#64748b">Platform overview and analytics</p></div>
-        <div style="font-size:12px;color:#64748b">${new Date().toLocaleDateString('en-IN', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}</div>
-      </div>
-      <!-- Main Stats -->
-      <div class="grid grid-cols-4 gap-4 mb-6">
-        <div class="card p-4"><div style="color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px">Total Students</div><div class="text-3xl font-black mt-1" style="color:#6366f1">${stats?.total_students || 0}</div><div style="font-size:11px;color:#10b981;margin-top:4px">+${stats?.new_students_today || 0} today</div></div>
-        <div class="card p-4"><div style="color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px">Resources</div><div class="text-3xl font-black mt-1" style="color:#8b5cf6">${stats?.total_resources || 0}</div><div style="font-size:11px;color:#64748b;margin-top:4px">${stats?.total_downloads || 0} downloads</div></div>
-        <div class="card p-4"><div style="color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px">Quizzes</div><div class="text-3xl font-black mt-1" style="color:#10b981">${stats?.total_quizzes || 0}</div><div style="font-size:11px;color:#64748b;margin-top:4px">${stats?.total_attempts || 0} attempts</div></div>
-        <div class="card p-4"><div style="color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px">AI Sessions</div><div class="text-3xl font-black mt-1" style="color:#f59e0b">${stats?.total_ai_sessions || 0}</div><div style="font-size:11px;color:#64748b;margin-top:4px">${stats?.avg_quiz_score || 0}% avg score</div></div>
-      </div>
-      <div class="grid grid-cols-3 gap-6">
-        <!-- Top Resources -->
-        <div class="col-span-2 card p-5">
-          <h3 class="font-bold mb-4" style="color:#e2e8f0">📥 Most Downloaded Resources</h3>
-          <div class="space-y-2">
-            ${(topResources || []).slice(0,6).map((r, i) => `<div class="flex items-center gap-3 p-3 rounded-xl" style="background:rgba(255,255,255,0.02)">
-              <div style="width:24px;text-align:center;font-weight:bold;color:#64748b">${i+1}</div>
-              <div style="flex:1;min-width:0"><div class="font-medium text-sm" style="color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.title}</div><div style="font-size:11px;color:#64748b">${r.type} ${r.subject_name ? '• '+r.subject_name : ''}</div></div>
-              <div class="text-right"><div style="font-size:13px;font-weight:bold;color:#818cf8">${r.download_count} <i class="fas fa-download" style="font-size:10px"></i></div></div>
-            </div>`).join('')}
-          </div>
-        </div>
-        <!-- Branch Stats -->
-        <div class="card p-5">
-          <h3 class="font-bold mb-4" style="color:#e2e8f0">🎓 Students by Branch</h3>
-          <div class="space-y-2">
-            ${(branchStats || []).slice(0,8).map(b => `<div>
-              <div class="flex justify-between text-sm mb-1"><span style="color:#94a3b8">${b.branch}</span><span style="color:#818cf8;font-weight:600">${b.count}</span></div>
-              <div class="progress-bar" style="height:6px"><div class="progress-fill" style="width:${Math.min(100,(b.count/(branchStats[0]?.count||1))*100)}%"></div></div>
-            </div>`).join('')}
-          </div>
-        </div>
-      </div>
-      <!-- Recent Activity -->
-      <div class="card p-5 mt-6">
-        <h3 class="font-bold mb-4" style="color:#e2e8f0">⚡ Recent Quiz Activity</h3>
-        <div class="space-y-2">
-          ${(recentActivity || []).map(a => `<div class="flex items-center gap-4 p-3 rounded-xl" style="background:rgba(255,255,255,0.02)">
-            <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;color:white">${(a.name||'?')[0]}</div>
-            <div style="flex:1"><div style="font-size:13px;color:#e2e8f0">${a.name} completed <span style="color:#818cf8">${a.quiz_title}</span></div>
-            <div style="font-size:11px;color:#64748b">${new Date(a.completed_at).toLocaleString()}</div></div>
-            <div class="badge ${a.percentage >= 70 ? 'badge-success' : a.percentage >= 50 ? 'badge-warning' : 'badge-danger'}">${a.percentage}%</div>
-          </div>`).join('')}
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-// ===== ADMIN RESOURCES =====
-async function renderAdminResources() {
-  const data = await api('/api/resources?limit=50');
-  const resources = data.resources || [];
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <div class="flex items-center justify-between mb-6">
-        <div><h2 class="text-2xl font-black gradient-text">Manage Resources</h2><p style="color:#64748b">${resources.length} resources</p></div>
-        <button onclick="openModal('add-resource-modal')" class="btn-primary"><i class="fas fa-upload mr-2"></i>Upload Resource</button>
-      </div>
-      <div class="card p-1">
-        <table class="w-full">
-          <thead><tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
-            <th class="text-left p-3" style="color:#64748b;font-size:12px;font-weight:600">TITLE</th>
-            <th class="text-left p-3" style="color:#64748b;font-size:12px;font-weight:600">TYPE</th>
-            <th class="text-left p-3" style="color:#64748b;font-size:12px;font-weight:600">BRANCH</th>
-            <th class="text-left p-3" style="color:#64748b;font-size:12px;font-weight:600">STATS</th>
-            <th class="text-left p-3" style="color:#64748b;font-size:12px;font-weight:600">ACTIONS</th>
-          </tr></thead>
-          <tbody id="resources-table">
-            ${resources.map(r => `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)" id="res-row-${r.id}">
-              <td class="p-3"><div style="font-size:13px;color:#e2e8f0;max-width:300px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.title}</div><div style="font-size:11px;color:#64748b">${r.subject_name || 'General'}</div></td>
-              <td class="p-3"><span class="badge badge-primary" style="font-size:10px">${r.type}</span></td>
-              <td class="p-3" style="font-size:12px;color:#94a3b8">${r.branch_code || '-'} ${r.semester ? 'Sem'+r.semester : ''}</td>
-              <td class="p-3" style="font-size:12px;color:#64748b">📥 ${r.download_count} • 👁 ${r.view_count}</td>
-              <td class="p-3">
-                <div class="flex gap-2">
-                  <a href="${r.file_url}" target="_blank" style="color:#818cf8;background:none;border:none;cursor:pointer;font-size:12px" title="View"><i class="fas fa-external-link-alt"></i></a>
-                  <button onclick="deleteResource(${r.id})" style="color:#ef4444;background:none;border:none;cursor:pointer;font-size:12px" title="Delete"><i class="fas fa-trash"></i></button>
-                </div>
-              </td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
-
-async function handleAddResource(e) {
-  e.preventDefault();
-  const body = {
-    title: document.getElementById('res-title').value,
-    type: document.getElementById('res-type').value,
-    branch_code: document.getElementById('res-branch').value,
-    semester: document.getElementById('res-semester').value,
-    subject_id: document.getElementById('res-subject').value || null,
-    file_url: document.getElementById('res-url').value,
-    description: document.getElementById('res-desc').value,
-    is_important: document.getElementById('res-important').checked
-  };
-  try {
-    await api('/api/resources', { method: 'POST', body: JSON.stringify(body) });
-    toast('Resource uploaded successfully! 📤', 'success');
-    closeModal('add-resource-modal');
-    navigate('admin-resources');
-    document.getElementById('add-resource-form').reset();
-  } catch(e) { toast(e.message, 'error'); }
+    await apiFetch(`/resources/${resourceId}/bookmark`, { method: 'POST' });
+    btn.innerHTML = '<i class="fas fa-bookmark text-primary-400"></i>';
+    showToast('Bookmarked! 🔖', 'success');
+  } catch(e) {
+    showToast(e.message, 'error');
+  }
 }
 
 async function deleteResource(id) {
   if (!confirm('Delete this resource?')) return;
-  try { await api(`/api/resources/${id}`, { method: 'DELETE' }); toast('Resource deleted', 'info'); document.getElementById(`res-row-${id}`)?.remove(); }
-  catch(e) { toast(e.message, 'error'); }
-}
-
-async function loadSubjectsForAdmin(branch) {
-  const select = document.getElementById('res-subject');
-  if (!select) return;
-  const semester = document.getElementById('res-semester')?.value || '';
-  select.innerHTML = '<option value="">Loading...</option>';
   try {
-    const data = await api(`/api/subjects?branch=${branch}&semester=${semester}`);
-    select.innerHTML = `<option value="">Select Subject</option>${data.subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}`;
-  } catch { select.innerHTML = '<option value="">No subjects</option>'; }
+    await apiFetch(`/resources/${id}`, { method: 'DELETE' });
+    showToast('Resource deleted', 'success');
+    loadResources();
+  } catch(e) {
+    showToast(e.message, 'error');
+  }
 }
 
-// ===== ADMIN QUIZZES =====
-async function renderAdminQuizzes() {
-  const data = await api('/api/quiz');
-  const quizzes = data.quizzes || [];
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <div class="flex items-center justify-between mb-6">
-        <div><h2 class="text-2xl font-black gradient-text">Manage Quizzes</h2><p style="color:#64748b">${quizzes.length} quizzes</p></div>
-        <button onclick="openQuizCreator()" class="btn-primary"><i class="fas fa-plus mr-2"></i>Create Quiz</button>
-      </div>
-      <div class="grid grid-cols-3 gap-4">
-        ${quizzes.map(q => `<div class="card p-5">
-          <div class="flex items-center justify-between mb-3">
-            <span class="badge ${q.difficulty==='easy'?'badge-success':q.difficulty==='hard'?'badge-danger':'badge-warning'}">${q.difficulty}</span>
-            <button onclick="deleteQuiz(${q.id})" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:12px"><i class="fas fa-trash"></i></button>
-          </div>
-          <h3 class="font-bold mb-2 text-sm" style="color:#e2e8f0">${q.title}</h3>
-          <div style="font-size:12px;color:#64748b">${q.question_count} questions • ${q.duration_minutes} min</div>
-          ${q.branch_code ? `<span class="badge badge-primary mt-2" style="font-size:10px">${q.branch_code}</span>` : ''}
-        </div>`).join('')}
-      </div>
-    </div>
-  `;
+function showUploadModal() {
+  document.getElementById('upload-modal').style.display = 'flex';
 }
 
-function openQuizCreator() {
-  quizQuestionCount = 0;
-  document.getElementById('questions-list').innerHTML = '';
-  openModal('create-quiz-modal');
-  addQuizQuestion();
-}
-
-function addQuizQuestion() {
-  quizQuestionCount++;
-  const qId = quizQuestionCount;
-  const div = document.createElement('div');
-  div.id = `question-${qId}`;
-  div.className = 'card p-4 mb-3';
-  div.style.background = 'rgba(255,255,255,0.03)';
-  div.innerHTML = `
-    <div class="flex items-center justify-between mb-3">
-      <span class="badge badge-primary">Q${qId}</span>
-      <button type="button" onclick="document.getElementById('question-${qId}').remove()" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:12px"><i class="fas fa-times"></i></button>
-    </div>
-    <textarea class="input-field mb-3" name="question" rows="2" placeholder="Enter question..." required></textarea>
-    <div class="grid grid-cols-2 gap-2 mb-2">
-      <input type="text" class="input-field" name="option_a" placeholder="Option A" required>
-      <input type="text" class="input-field" name="option_b" placeholder="Option B" required>
-      <input type="text" class="input-field" name="option_c" placeholder="Option C" required>
-      <input type="text" class="input-field" name="option_d" placeholder="Option D" required>
-    </div>
-    <div class="flex gap-2">
-      <select class="input-field" name="correct_answer" style="flex:1">
-        <option value="a">Correct: A</option><option value="b">Correct: B</option><option value="c">Correct: C</option><option value="d">Correct: D</option>
-      </select>
-      <input type="text" class="input-field" name="explanation" placeholder="Explanation (optional)" style="flex:2">
-    </div>
-  `;
-  document.getElementById('questions-list').appendChild(div);
-}
-
-async function handleCreateQuiz(e) {
-  e.preventDefault();
-  const questions = [];
-  document.querySelectorAll('#questions-list .card').forEach(qCard => {
-    questions.push({
-      question: qCard.querySelector('[name="question"]').value,
-      option_a: qCard.querySelector('[name="option_a"]').value,
-      option_b: qCard.querySelector('[name="option_b"]').value,
-      option_c: qCard.querySelector('[name="option_c"]').value,
-      option_d: qCard.querySelector('[name="option_d"]').value,
-      correct_answer: qCard.querySelector('[name="correct_answer"]').value,
-      explanation: qCard.querySelector('[name="explanation"]').value,
-      marks: 1
-    });
-  });
-  if (questions.length === 0) { toast('Add at least one question', 'error'); return; }
+async function submitUpload() {
+  const title = document.getElementById('upload-title').value.trim();
+  const url = document.getElementById('upload-url').value.trim();
+  if (!title || !url) return showToast('Title and URL are required', 'error');
   const body = {
-    title: document.getElementById('quiz-title').value,
-    branch_code: document.getElementById('quiz-branch').value,
-    difficulty: document.getElementById('quiz-difficulty').value,
-    duration_minutes: parseInt(document.getElementById('quiz-duration').value),
-    passing_score: parseInt(document.getElementById('quiz-passing').value),
-    questions
+    title,
+    description: document.getElementById('upload-desc').value,
+    type: document.getElementById('upload-type').value,
+    semester: parseInt(document.getElementById('upload-semester').value),
+    file_url: url,
+    file_name: title + '.pdf',
+    tags: document.getElementById('upload-tags').value.split(',').map(t => t.trim()).filter(Boolean),
+    is_important: document.getElementById('upload-important').checked ? 1 : 0,
+    branch_code: currentUser?.branch || 'CSE',
   };
   try {
-    await api('/api/quiz', { method: 'POST', body: JSON.stringify(body) });
-    toast('Quiz created successfully! 🧪', 'success');
-    closeModal('create-quiz-modal');
-    navigate('admin-quizzes');
-  } catch(e) { toast(e.message, 'error'); }
+    await apiFetch('/resources', { method: 'POST', body: JSON.stringify(body) });
+    closeModal('upload-modal');
+    showToast('Resource uploaded successfully! 📚', 'success');
+    loadResources();
+  } catch(e) {
+    showToast(e.message, 'error');
+  }
 }
 
-async function deleteQuiz(id) {
-  if (!confirm('Delete this quiz?')) return;
-  try { await api(`/api/quiz/${id}`, { method: 'DELETE' }); toast('Quiz deleted', 'info'); navigate('admin-quizzes'); }
-  catch(e) { toast(e.message, 'error'); }
-}
+// ============================================================
+// QUIZ
+// ============================================================
+async function loadQuizList() {
+  const el = document.getElementById('quiz-list-content');
+  el.innerHTML = skeletonGrid(4, 100);
+  document.getElementById('quiz-list-view').style.display = 'block';
+  document.getElementById('quiz-take-view').style.display = 'none';
+  document.getElementById('quiz-result-view').style.display = 'none';
 
-// ===== ADMIN USERS =====
-async function renderAdminUsers() {
-  const data = await api('/api/users?role=student&limit=50');
-  const users = data.users || [];
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <div class="flex items-center justify-between mb-6">
-        <div><h2 class="text-2xl font-black gradient-text">Manage Students</h2><p style="color:#64748b">${data.total || users.length} students</p></div>
-        <input type="text" class="input-field" style="width:280px" placeholder="Search students..." id="user-search" oninput="searchUsers(this.value)">
-      </div>
-      <div class="card p-1">
-        <table class="w-full" id="users-table">
-          <thead><tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
-            <th class="text-left p-3" style="color:#64748b;font-size:12px">STUDENT</th>
-            <th class="text-left p-3" style="color:#64748b;font-size:12px">BRANCH</th>
-            <th class="text-left p-3" style="color:#64748b;font-size:12px">POINTS</th>
-            <th class="text-left p-3" style="color:#64748b;font-size:12px">LEVEL</th>
-            <th class="text-left p-3" style="color:#64748b;font-size:12px">STATUS</th>
-            <th class="text-left p-3" style="color:#64748b;font-size:12px">ACTIONS</th>
-          </tr></thead>
-          <tbody>
-            ${users.map(u => `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
-              <td class="p-3"><div style="font-size:13px;color:#e2e8f0">${u.name}</div><div style="font-size:11px;color:#64748b">${u.email}</div></td>
-              <td class="p-3" style="font-size:12px;color:#94a3b8">${u.branch || '-'} Sem${u.semester}</td>
-              <td class="p-3" style="font-size:13px;color:#f59e0b;font-weight:bold">⭐ ${u.points}</td>
-              <td class="p-3"><span class="level-badge" style="font-size:11px">Lv.${u.level}</span></td>
-              <td class="p-3"><span class="badge ${u.is_active ? 'badge-success' : 'badge-danger'}">${u.is_active ? 'Active' : 'Inactive'}</span></td>
-              <td class="p-3">
-                <button onclick="toggleUser(${u.id}, ${u.is_active}, this)" class="badge ${u.is_active ? 'badge-danger' : 'badge-success'}" style="cursor:pointer">${u.is_active ? 'Deactivate' : 'Activate'}</button>
-              </td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
-
-async function searchUsers(q) {
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(async () => {
-    const data = await api(`/api/users?role=student&search=${encodeURIComponent(q)}`);
-    const body = document.querySelector('#users-table tbody');
-    if (!body) return;
-    body.innerHTML = (data.users || []).map(u => `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
-      <td class="p-3"><div style="font-size:13px;color:#e2e8f0">${u.name}</div><div style="font-size:11px;color:#64748b">${u.email}</div></td>
-      <td class="p-3" style="font-size:12px;color:#94a3b8">${u.branch} Sem${u.semester}</td>
-      <td class="p-3" style="font-size:13px;color:#f59e0b">⭐ ${u.points}</td>
-      <td class="p-3"><span class="level-badge" style="font-size:11px">Lv.${u.level}</span></td>
-      <td class="p-3"><span class="badge ${u.is_active ? 'badge-success' : 'badge-danger'}">${u.is_active ? 'Active' : 'Inactive'}</span></td>
-      <td class="p-3"><button onclick="toggleUser(${u.id},${u.is_active},this)" class="badge ${u.is_active ? 'badge-danger' : 'badge-success'}" style="cursor:pointer">${u.is_active ? 'Deactivate' : 'Activate'}</button></td>
-    </tr>`).join('');
-  }, 300);
-}
-
-async function toggleUser(id, isActive, btn) {
   try {
-    const data = await api(`/api/users/${id}/toggle`, { method: 'PATCH' });
-    btn.textContent = data.is_active ? 'Deactivate' : 'Activate';
-    btn.className = `badge ${data.is_active ? 'badge-danger' : 'badge-success'} cursor-pointer`;
-    toast(`User ${data.is_active ? 'activated' : 'deactivated'}`, 'success');
-  } catch(e) { toast(e.message, 'error'); }
-}
+    const data = await apiFetch('/quiz');
+    const quizzes = data.quizzes || [];
+    if (!quizzes.length) { el.innerHTML = '<div class="text-center py-16"><div class="text-5xl mb-3">🎯</div><p style="color:#64748b">No quizzes available yet</p></div>'; return; }
 
-// ===== ADMIN ANNOUNCEMENTS =====
-async function renderAdminAnnouncements() {
-  const data = await api('/api/announcements');
-  const announcements = data.announcements || [];
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <div class="flex items-center justify-between mb-6">
-        <div><h2 class="text-2xl font-black gradient-text">Announcements</h2></div>
-        <button onclick="document.getElementById('add-announcement').style.display='block'" class="btn-primary"><i class="fas fa-plus mr-2"></i>Add Announcement</button>
-      </div>
-      <div id="add-announcement" style="display:none" class="card p-5 mb-6">
-        <h3 class="font-bold mb-4" style="color:#e2e8f0">Create Announcement</h3>
-        <form onsubmit="createAnnouncement(event)">
-          <div class="grid grid-cols-2 gap-3 mb-3">
-            <div class="col-span-2"><label class="block text-sm mb-1" style="color:#94a3b8">Title</label><input type="text" id="ann-title" class="input-field" required></div>
-            <div><label class="block text-sm mb-1" style="color:#94a3b8">Type</label>
-              <select id="ann-type" class="input-field"><option value="general">General</option><option value="exam">Exam</option><option value="placement">Placement</option><option value="resource">Resource</option></select>
+    el.innerHTML = `
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        ${quizzes.map(q => `
+          <div class="card p-5 flex flex-col">
+            <div class="flex items-start justify-between mb-3">
+              <div class="text-3xl">${q.difficulty==='easy'?'🟢':q.difficulty==='hard'?'🔴':'🟡'}</div>
+              <span class="badge-pill ${q.difficulty==='easy'?'badge-green':q.difficulty==='hard'?'badge-red':'badge-yellow'}">${q.difficulty}</span>
             </div>
-            <div><label class="block text-sm mb-1" style="color:#94a3b8">Branch (optional)</label><select id="ann-branch" class="input-field"><option value="">All Branches</option><option value="CSE">CSE</option><option value="ECE">ECE</option></select></div>
-            <div class="col-span-2"><label class="block text-sm mb-1" style="color:#94a3b8">Content</label><textarea id="ann-content" class="input-field" rows="3" required></textarea></div>
+            <h3 class="font-bold text-base mb-1">${q.title}</h3>
+            <p class="text-xs mb-3 flex-1" style="color:#94a3b8">${q.description || 'Test your knowledge with this quiz'}</p>
+            <div class="grid grid-cols-3 gap-2 text-center mb-4">
+              <div class="p-2 rounded-lg" style="background:rgba(99,102,241,.08)"><div class="text-sm font-bold">${q.total_questions}</div><div class="text-xs" style="color:#64748b">Questions</div></div>
+              <div class="p-2 rounded-lg" style="background:rgba(99,102,241,.08)"><div class="text-sm font-bold">${q.duration_minutes}m</div><div class="text-xs" style="color:#64748b">Time</div></div>
+              <div class="p-2 rounded-lg" style="background:rgba(99,102,241,.08)"><div class="text-sm font-bold">${q.passing_score}%</div><div class="text-xs" style="color:#64748b">Pass</div></div>
+            </div>
+            <button class="btn-primary w-full" onclick="startQuiz(${q.id})"><i class="fas fa-play mr-2"></i>Start Quiz</button>
           </div>
-          <div class="flex gap-3">
-            <button type="submit" class="btn-primary flex-1">Publish</button>
-            <button type="button" onclick="document.getElementById('add-announcement').style.display='none'" class="btn-secondary flex-1">Cancel</button>
-          </div>
-        </form>
+        `).join('')}
       </div>
-      <div class="space-y-3">
-        ${announcements.map(a => `<div class="card p-4 flex items-start justify-between gap-4">
-          <div>
-            <div class="font-semibold" style="color:#e2e8f0">${a.title}</div>
-            <div style="font-size:12px;color:#64748b;margin-top:2px">${a.type} • ${new Date(a.created_at).toLocaleDateString()}</div>
-            <p style="color:#94a3b8;font-size:13px;margin-top:6px">${a.content.slice(0, 100)}...</p>
-          </div>
-          <button onclick="deleteAnnouncement(${a.id})" style="background:none;border:none;cursor:pointer;color:#ef4444"><i class="fas fa-trash"></i></button>
-        </div>`).join('')}
+    `;
+  } catch(e) {
+    el.innerHTML = errorBox(e.message);
+  }
+}
+
+async function startQuiz(quizId) {
+  try {
+    showToast('Loading quiz...', 'info');
+    const data = await apiFetch(`/quiz/${quizId}`);
+    currentQuiz = data;
+    quizAnswers = {};
+    currentQuestionIndex = 0;
+    document.getElementById('quiz-list-view').style.display = 'none';
+    document.getElementById('quiz-take-view').style.display = 'block';
+    document.getElementById('quiz-result-view').style.display = 'none';
+    renderQuizQuestion();
+    startQuizTimer(data.quiz.duration_minutes * 60);
+  } catch(e) {
+    showToast('Failed to load quiz: ' + e.message, 'error');
+  }
+}
+
+function renderQuizQuestion() {
+  const el = document.getElementById('quiz-take-content');
+  if (!currentQuiz) return;
+  const q = currentQuiz.questions[currentQuestionIndex];
+  const total = currentQuiz.questions.length;
+  const quiz = currentQuiz.quiz;
+  const progress = ((currentQuestionIndex + 1) / total * 100).toFixed(0);
+
+  el.innerHTML = `
+    <div class="max-w-2xl mx-auto">
+      <!-- Header -->
+      <div class="flex items-center justify-between mb-4">
+        <button class="btn-secondary text-sm" onclick="loadQuizList()"><i class="fas fa-times mr-1"></i>Exit</button>
+        <div class="text-center">
+          <div class="font-bold text-sm">${quiz.title}</div>
+          <div class="text-xs" style="color:#64748b">Question ${currentQuestionIndex+1} of ${total}</div>
+        </div>
+        <div class="text-lg font-bold text-primary-400" id="quiz-timer">--:--</div>
+      </div>
+      <!-- Progress -->
+      <div class="progress-bar mb-6"><div class="progress-fill" style="width:${progress}%"></div></div>
+      <!-- Question -->
+      <div class="card p-6 mb-4">
+        <div class="text-xs mb-3" style="color:#6366f1">Question ${currentQuestionIndex+1}</div>
+        <h3 class="text-base font-semibold mb-5">${q.question}</h3>
+        <div>
+          ${['a','b','c','d'].map(opt => `
+            <div class="quiz-option ${quizAnswers[currentQuestionIndex]===opt?'selected':''}" onclick="selectAnswer(${currentQuestionIndex},'${opt}',this)">
+              <span class="font-bold mr-2 text-primary-400">${opt.toUpperCase()}.</span>
+              ${q['option_'+opt]}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <!-- Navigation -->
+      <div class="flex items-center justify-between">
+        <button class="btn-secondary" onclick="prevQuestion()" ${currentQuestionIndex===0?'disabled':''}>← Previous</button>
+        <div class="flex gap-2 flex-wrap justify-center">
+          ${currentQuiz.questions.map((_,i) => `
+            <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold cursor-pointer transition-all ${i===currentQuestionIndex?'bg-primary-500 text-white':quizAnswers[i]?'bg-green-500 text-white':''}" 
+              style="${i!==currentQuestionIndex&&!quizAnswers[i]?'background:rgba(99,102,241,.15);color:#818cf8':''}"
+              onclick="goToQuestion(${i})">${i+1}</div>
+          `).join('')}
+        </div>
+        ${currentQuestionIndex < total-1
+          ? `<button class="btn-primary" onclick="nextQuestion()">Next →</button>`
+          : `<button class="btn-primary" onclick="submitQuiz()" style="background:linear-gradient(135deg,#22c55e,#16a34a)"><i class="fas fa-check mr-1"></i>Submit</button>`
+        }
       </div>
     </div>
   `;
 }
 
-async function createAnnouncement(e) {
-  e.preventDefault();
+function selectAnswer(qIdx, opt, el) {
+  quizAnswers[qIdx] = opt;
+  el.closest('.card').querySelectorAll('.quiz-option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function nextQuestion() { if (currentQuestionIndex < currentQuiz.questions.length-1) { currentQuestionIndex++; renderQuizQuestion(); } }
+function prevQuestion() { if (currentQuestionIndex > 0) { currentQuestionIndex--; renderQuizQuestion(); } }
+function goToQuestion(i) { currentQuestionIndex = i; renderQuizQuestion(); }
+
+function startQuizTimer(seconds) {
+  if (quizTimer) clearInterval(quizTimer);
+  let remaining = seconds;
+  quizTimer = setInterval(() => {
+    remaining--;
+    const timerEl = document.getElementById('quiz-timer');
+    if (timerEl) {
+      const m = Math.floor(remaining/60).toString().padStart(2,'0');
+      const s = (remaining%60).toString().padStart(2,'0');
+      timerEl.textContent = `${m}:${s}`;
+      if (remaining <= 60) timerEl.style.color = '#ef4444';
+    }
+    if (remaining <= 0) { clearInterval(quizTimer); submitQuiz(); }
+  }, 1000);
+}
+
+async function submitQuiz() {
+  if (quizTimer) clearInterval(quizTimer);
+  const answers = currentQuiz.questions.map((_, i) => quizAnswers[i] || '');
   try {
-    await api('/api/announcements', { method: 'POST', body: JSON.stringify({ title: document.getElementById('ann-title').value, content: document.getElementById('ann-content').value, type: document.getElementById('ann-type').value, branch_code: document.getElementById('ann-branch').value || null }) });
-    toast('Announcement published! 📢', 'success');
-    navigate('admin-announcements');
-  } catch(e) { toast(e.message, 'error'); }
+    const data = await apiFetch(`/quiz/${currentQuiz.quiz.id}/submit`, {
+      method: 'POST',
+      body: JSON.stringify({ answers, time_taken: currentQuiz.quiz.duration_minutes * 60 })
+    });
+    showQuizResult(data);
+  } catch(e) {
+    showToast('Failed to submit: ' + e.message, 'error');
+  }
+}
+
+function showQuizResult(data) {
+  document.getElementById('quiz-take-view').style.display = 'none';
+  document.getElementById('quiz-result-view').style.display = 'block';
+  const el = document.getElementById('quiz-result-content');
+  const { attempt, questions } = data;
+  const pct = attempt.percentage || 0;
+  const passed = pct >= (currentQuiz?.quiz?.passing_score || 60);
+
+  el.innerHTML = `
+    <div class="max-w-2xl mx-auto">
+      <div class="card p-8 text-center mb-6">
+        <div class="text-6xl mb-4">${pct>=90?'🏆':pct>=60?'🎉':'😔'}</div>
+        <h2 class="text-3xl font-bold mb-2">${pct.toFixed(1)}%</h2>
+        <p class="text-xl mb-2">${passed?'✅ Passed!':'❌ Not Passed'}</p>
+        <p style="color:#64748b">${attempt.score}/${attempt.total_marks} correct answers</p>
+        <div class="flex gap-4 justify-center mt-4 flex-wrap">
+          <span class="badge-pill ${passed?'badge-green':'badge-red'}">${passed?'PASSED':'FAILED'}</span>
+          ${attempt.points_earned > 0 ? `<span class="badge-pill badge-yellow">+${attempt.points_earned} pts earned</span>` : ''}
+        </div>
+        <div class="w-full max-w-xs mx-auto mt-6"><div class="progress-bar h-3"><div class="progress-fill" style="width:${pct}%;background:${passed?'linear-gradient(90deg,#22c55e,#16a34a)':'linear-gradient(90deg,#ef4444,#dc2626)'}"></div></div></div>
+      </div>
+
+      <div class="card p-5 mb-6">
+        <h3 class="font-bold mb-4">📋 Review Answers</h3>
+        ${(questions||[]).map((q,i) => `
+          <div class="p-4 rounded-xl mb-3" style="background:rgba(${q.user_answer===q.correct_answer?'34,197,94':'239,68,68'},.08);border:1px solid rgba(${q.user_answer===q.correct_answer?'34,197,94':'239,68,68'},.2)">
+            <div class="flex items-start gap-2">
+              <span>${q.user_answer===q.correct_answer?'✅':'❌'}</span>
+              <div class="flex-1">
+                <p class="font-medium text-sm">${i+1}. ${q.question}</p>
+                <p class="text-xs mt-1">Your answer: <strong>${q.user_answer ? q.user_answer.toUpperCase()+'. '+q['option_'+q.user_answer] : 'Not answered'}</strong></p>
+                ${q.user_answer!==q.correct_answer ? `<p class="text-xs text-green-400">Correct: ${q.correct_answer.toUpperCase()}. ${q['option_'+q.correct_answer]}</p>` : ''}
+                ${q.explanation ? `<p class="text-xs mt-2 p-2 rounded" style="background:rgba(99,102,241,.1);color:#a5b4fc">💡 ${q.explanation}</p>` : ''}
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="flex gap-3">
+        <button class="btn-secondary flex-1" onclick="loadQuizList()"><i class="fas fa-list mr-1"></i>All Quizzes</button>
+        <button class="btn-primary flex-1" onclick="startQuiz(${currentQuiz.quiz.id})"><i class="fas fa-redo mr-1"></i>Retry Quiz</button>
+      </div>
+    </div>
+  `;
+}
+
+function showCreateQuizModal() { document.getElementById('create-quiz-modal').style.display = 'flex'; }
+
+async function submitCreateQuiz() {
+  const title = document.getElementById('cq-title').value.trim();
+  if (!title) return showToast('Quiz title is required', 'error');
+  const body = {
+    title,
+    description: document.getElementById('cq-desc').value,
+    branch_code: document.getElementById('cq-branch').value,
+    semester: parseInt(document.getElementById('cq-semester').value),
+    duration_minutes: parseInt(document.getElementById('cq-duration').value),
+    difficulty: document.getElementById('cq-difficulty').value,
+    passing_score: parseInt(document.getElementById('cq-passing').value),
+  };
+  try {
+    await apiFetch('/quiz', { method: 'POST', body: JSON.stringify(body) });
+    closeModal('create-quiz-modal');
+    showToast('Quiz created! 🎯', 'success');
+    loadQuizList();
+  } catch(e) {
+    showToast(e.message, 'error');
+  }
+}
+
+// ============================================================
+// AI ASSISTANT
+// ============================================================
+async function loadSubjectsForAI() {
+  try {
+    const data = await apiFetch(`/subjects?branch=${currentUser?.branch||'CSE'}`);
+    const sel = document.getElementById('ai-subject-select');
+    if (sel && data.subjects) {
+      data.subjects.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = `${s.name} (Sem ${s.semester})`;
+        sel.appendChild(opt);
+      });
+    }
+  } catch(e) {}
+}
+
+function quickChat(msg) {
+  document.getElementById('chat-input').value = msg;
+  sendChat();
+}
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+
+  const subjectId = document.getElementById('ai-subject-select').value;
+  chatHistory.push({ role: 'user', content: msg });
+  renderChatMessages();
+
+  // Add typing indicator
+  const container = document.getElementById('chat-messages');
+  const typingEl = document.createElement('div');
+  typingEl.id = 'typing-indicator';
+  typingEl.innerHTML = `<div class="flex gap-2 items-end"><div class="chat-bubble-ai p-3"><div class="flex gap-1 items-center">${[1,2,3].map(i=>`<div class="typing-dot" style="animation-delay:${(i-1)*.15}s"></div>`).join('')}</div></div></div>`;
+  container.appendChild(typingEl);
+  container.scrollTop = container.scrollHeight;
+
+  try {
+    const data = await apiFetch('/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message: msg, subject_id: subjectId ? parseInt(subjectId) : null, history: chatHistory.slice(-6) })
+    });
+    typingEl.remove();
+    const reply = data.reply || 'I could not process that request.';
+    chatHistory.push({ role: 'assistant', content: reply });
+    renderChatMessages();
+  } catch(e) {
+    typingEl.remove();
+    const errMsg = "I'm having trouble connecting right now. Please check your configuration or try again later.";
+    chatHistory.push({ role: 'assistant', content: errMsg });
+    renderChatMessages();
+  }
+}
+
+function renderChatMessages() {
+  const container = document.getElementById('chat-messages');
+  if (!container) return;
+  // Keep welcome msg if no history
+  if (!chatHistory.length) return;
+
+  container.innerHTML = chatHistory.map(m => `
+    <div class="flex gap-2 items-end ${m.role==='user'?'justify-end':''}">
+      ${m.role==='assistant' ? '<div class="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-sm" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">🤖</div>' : ''}
+      <div class="${m.role==='user'?'chat-bubble-user':'chat-bubble-ai'}">
+        <div class="text-sm" style="line-height:1.6">${m.role==='assistant' ? (typeof marked !== 'undefined' ? marked.parse(m.content) : m.content.replace(/\n/g,'<br>')) : m.content}</div>
+      </div>
+    </div>
+  `).join('');
+  container.scrollTop = container.scrollHeight;
+}
+
+function clearChat() {
+  chatHistory = [];
+  document.getElementById('chat-messages').innerHTML = `
+    <div class="text-center py-8">
+      <div class="text-5xl mb-3">🤖</div>
+      <p class="font-semibold">Chat cleared!</p>
+      <p class="text-sm mt-1" style="color:#64748b">Start a new conversation.</p>
+    </div>`;
+}
+
+// ============================================================
+// PLACEMENT
+// ============================================================
+async function loadPlacement(category) {
+  const el = document.getElementById('placement-content');
+  el.innerHTML = skeletonGrid(4, 100);
+  const cat = category || document.getElementById('placement-cat').value;
+  try {
+    let url = '/placement';
+    if (cat) url += `?category=${cat}`;
+    const data = await apiFetch(url);
+    const questions = data.questions || [];
+    if (!questions.length) { el.innerHTML = '<div class="text-center py-12"><div class="text-5xl mb-3">💼</div><p style="color:#64748b">No questions found for this category</p></div>'; return; }
+    el.innerHTML = `
+      <div class="space-y-4">
+        ${questions.map((q,i) => `
+          <div class="card p-5">
+            <div class="flex items-start gap-3">
+              <div class="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold" style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff">${i+1}</div>
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-2 flex-wrap">
+                  <span class="badge-pill ${q.category==='aptitude'?'badge-blue':q.category==='coding'?'badge-green':q.category==='hr'?'badge-yellow':'badge-purple'}">${capitalizeFirst(q.category)}</span>
+                  ${q.company ? `<span class="badge-pill badge-blue text-xs"><i class="fas fa-building mr-1"></i>${q.company}</span>` : ''}
+                  <span class="badge-pill ${q.difficulty==='easy'?'badge-green':q.difficulty==='hard'?'badge-red':'badge-yellow'}">${q.difficulty}</span>
+                </div>
+                <p class="font-semibold text-sm mb-3">${q.question}</p>
+                <div class="collapsed-answer" id="ans-${i}" style="display:none">
+                  <div class="p-3 rounded-xl text-sm" style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);color:#86efac">
+                    <strong>Answer:</strong><br>${q.answer || 'See solution below'}
+                  </div>
+                </div>
+                <button class="btn-secondary text-xs mt-2" onclick="toggleAnswer(${i})">
+                  <i class="fas fa-lightbulb mr-1"></i>Show Answer
+                </button>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>`;
+  } catch(e) {
+    el.innerHTML = errorBox(e.message);
+  }
+}
+
+function filterPlacement(cat) {
+  document.getElementById('placement-cat').value = cat;
+  loadPlacement(cat);
+}
+
+function toggleAnswer(i) {
+  const el = document.getElementById('ans-'+i);
+  const btn = el.nextElementSibling;
+  if (el.style.display === 'none') {
+    el.style.display = 'block';
+    btn.innerHTML = '<i class="fas fa-eye-slash mr-1"></i>Hide Answer';
+  } else {
+    el.style.display = 'none';
+    btn.innerHTML = '<i class="fas fa-lightbulb mr-1"></i>Show Answer';
+  }
+}
+
+// ============================================================
+// STUDY PLANNER
+// ============================================================
+async function loadPlanner() {
+  const el = document.getElementById('planner-content');
+  el.innerHTML = skeletonGrid(3, 80);
+  try {
+    const data = await apiFetch('/planner');
+    const plans = data.plans || [];
+    const pending = plans.filter(p => p.status === 'pending');
+    const completed = plans.filter(p => p.status === 'completed');
+
+    el.innerHTML = `
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="stat-card text-center"><div class="text-2xl font-bold text-primary-400">${plans.length}</div><div class="text-xs mt-1" style="color:#64748b">Total Sessions</div></div>
+        <div class="stat-card text-center"><div class="text-2xl font-bold text-yellow-400">${pending.length}</div><div class="text-xs mt-1" style="color:#64748b">Pending</div></div>
+        <div class="stat-card text-center"><div class="text-2xl font-bold text-green-400">${completed.length}</div><div class="text-xs mt-1" style="color:#64748b">Completed</div></div>
+      </div>
+
+      ${!plans.length ? `
+        <div class="text-center py-16 card p-10">
+          <div class="text-5xl mb-3">📅</div>
+          <p class="font-semibold mb-2">No study sessions planned</p>
+          <p class="text-sm mb-4" style="color:#64748b">Create your first study session to stay organized</p>
+          <button class="btn-primary" onclick="showAddPlanModal()"><i class="fas fa-plus mr-1"></i>Add First Session</button>
+        </div>
+      ` : `
+        <div class="space-y-3">
+          ${plans.map(p => `
+            <div class="card p-4 flex items-center gap-4">
+              <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0" style="background:${p.status==='completed'?'rgba(34,197,94,.15)':p.priority==='high'?'rgba(239,68,68,.15)':'rgba(99,102,241,.15)'}">
+                ${p.status==='completed'?'✅':p.priority==='high'?'🔴':'📘'}
+              </div>
+              <div class="flex-1">
+                <div class="font-semibold text-sm">${p.title}</div>
+                <div class="text-xs mt-0.5" style="color:#64748b">📅 ${p.scheduled_date} · ⏱ ${p.duration_minutes} min · ${capitalizeFirst(p.priority)} priority</div>
+                ${p.description ? `<div class="text-xs mt-1" style="color:#94a3b8">${p.description}</div>` : ''}
+              </div>
+              <div class="flex gap-2">
+                ${p.status === 'pending' ? `
+                  <button class="btn-primary text-xs px-3 py-1" onclick="completePlan(${p.id})">✓ Done</button>
+                  <button class="btn-danger text-xs px-3 py-1" onclick="deletePlan(${p.id})"><i class="fas fa-trash"></i></button>
+                ` : `<span class="badge-pill badge-green">Completed</span>`}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    `;
+  } catch(e) {
+    el.innerHTML = errorBox(e.message);
+  }
+}
+
+function showAddPlanModal() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('plan-date').value = today;
+  document.getElementById('plan-modal').style.display = 'flex';
+}
+
+async function submitPlan() {
+  const title = document.getElementById('plan-title').value.trim();
+  const date = document.getElementById('plan-date').value;
+  if (!title || !date) return showToast('Title and date are required', 'error');
+  try {
+    await apiFetch('/planner', {
+      method: 'POST',
+      body: JSON.stringify({
+        title,
+        description: document.getElementById('plan-desc').value,
+        scheduled_date: date,
+        duration_minutes: parseInt(document.getElementById('plan-duration').value),
+        priority: document.getElementById('plan-priority').value,
+      })
+    });
+    closeModal('plan-modal');
+    showToast('Study session added! 📅', 'success');
+    loadPlanner();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function completePlan(id) {
+  try {
+    await apiFetch(`/planner/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'completed' }) });
+    showToast('Session marked as completed! ✅', 'success');
+    loadPlanner();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function deletePlan(id) {
+  if (!confirm('Delete this session?')) return;
+  try {
+    await apiFetch(`/planner/${id}`, { method: 'DELETE' });
+    showToast('Deleted', 'info');
+    loadPlanner();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+async function loadNotifications() {
+  const el = document.getElementById('notifications-content');
+  el.innerHTML = skeletonGrid(3, 60);
+  try {
+    const data = await apiFetch('/notifications');
+    const notifs = data.notifications || [];
+    document.getElementById('notif-count').style.display = 'none';
+
+    if (!notifs.length) { el.innerHTML = '<div class="text-center py-16"><div class="text-5xl mb-3">🔔</div><p style="color:#64748b">No notifications</p></div>'; return; }
+
+    el.innerHTML = notifs.map(n => `
+      <div class="notification-item" style="border-color:${n.type==='success'?'#22c55e':n.type==='warning'?'#eab308':n.type==='quiz'?'#6366f1':'#3b82f6'};opacity:${n.is_read?'.6':'1'}">
+        <div class="flex items-start gap-3">
+          <div class="text-xl">${n.type==='success'?'✅':n.type==='warning'?'⚠️':n.type==='quiz'?'🎯':n.type==='resource'?'📚':'ℹ️'}</div>
+          <div class="flex-1">
+            <div class="font-semibold text-sm">${n.title}</div>
+            <p class="text-xs mt-1" style="color:#94a3b8">${n.message}</p>
+            <div class="text-xs mt-2" style="color:#64748b">${timeAgo(n.created_at)}</div>
+          </div>
+          ${!n.is_read ? '<div class="w-2 h-2 rounded-full mt-1 flex-shrink-0" style="background:#6366f1"></div>' : ''}
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {
+    el.innerHTML = errorBox(e.message);
+  }
+}
+
+async function loadNotificationCount() {
+  try {
+    const data = await apiFetch('/notifications?unread=1');
+    const count = (data.notifications || []).filter(n => !n.is_read).length;
+    const badge = document.getElementById('notif-count');
+    if (count > 0) {
+      badge.textContent = count > 9 ? '9+' : count;
+      badge.style.display = 'flex';
+    }
+  } catch(e) {}
+}
+
+async function markAllRead() {
+  try {
+    await apiFetch('/notifications/read-all', { method: 'POST' });
+    showToast('All notifications marked as read', 'success');
+    loadNotifications();
+    document.getElementById('notif-count').style.display = 'none';
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+// ============================================================
+// GAMIFICATION
+// ============================================================
+async function loadGamification() {
+  const el = document.getElementById('gamification-content');
+  el.innerHTML = skeletonGrid(4, 100);
+  try {
+    const [leaderboard, badges, stats] = await Promise.allSettled([
+      apiFetch('/gamification/leaderboard'),
+      apiFetch('/gamification/badges'),
+      apiFetch('/gamification/my-stats'),
+    ]);
+
+    const lb = leaderboard.status === 'fulfilled' ? leaderboard.value.leaderboard || [] : [];
+    const allBadges = badges.status === 'fulfilled' ? badges.value.badges || [] : [];
+    const myStats = stats.status === 'fulfilled' ? stats.value : {};
+
+    el.innerHTML = `
+      <!-- My Stats -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="stat-card text-center"><div class="text-3xl mb-1">⭐</div><div class="text-2xl font-bold text-yellow-400">${currentUser.points || 0}</div><div class="text-xs" style="color:#64748b">Total Points</div></div>
+        <div class="stat-card text-center"><div class="text-3xl mb-1">🏅</div><div class="text-2xl font-bold text-primary-400">${currentUser.level || 1}</div><div class="text-xs" style="color:#64748b">Level</div></div>
+        <div class="stat-card text-center"><div class="text-3xl mb-1">🔥</div><div class="text-2xl font-bold text-orange-400">${currentUser.streak || 0}</div><div class="text-xs" style="color:#64748b">Day Streak</div></div>
+        <div class="stat-card text-center"><div class="text-3xl mb-1">🎖️</div><div class="text-2xl font-bold text-green-400">${myStats.badges_count || 0}</div><div class="text-xs" style="color:#64748b">Badges</div></div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Leaderboard -->
+        <div class="card p-5">
+          <h3 class="font-bold mb-4">🏆 Leaderboard</h3>
+          ${lb.length ? lb.slice(0,10).map((u,i) => `
+            <div class="leaderboard-row ${u.id === currentUser?.id ? 'border border-primary-500' : ''}">
+              <div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0" style="background:${i===0?'#fbbf24':i===1?'#9ca3af':i===2?'#b45309':'rgba(99,102,241,.2)'}">
+                ${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}
+              </div>
+              <div class="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center font-bold text-xs" style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff">${u.name[0]}</div>
+              <div class="flex-1 overflow-hidden">
+                <div class="font-semibold text-sm truncate">${u.name} ${u.id === currentUser?.id ? '(You)' : ''}</div>
+                <div class="text-xs" style="color:#64748b">${u.branch} · Lv ${u.level}</div>
+              </div>
+              <div class="text-right">
+                <div class="font-bold text-sm text-yellow-400">⭐ ${u.points}</div>
+                <div class="text-xs" style="color:#64748b">🔥 ${u.streak}d</div>
+              </div>
+            </div>
+          `).join('') : '<p class="text-sm text-center py-8" style="color:#64748b">No leaderboard data yet</p>'}
+        </div>
+
+        <!-- Badges -->
+        <div class="card p-5">
+          <h3 class="font-bold mb-4">🎖️ All Badges</h3>
+          <div class="grid grid-cols-2 gap-3">
+            ${allBadges.map(b => `
+              <div class="p-3 rounded-xl text-center" style="background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.15)">
+                <div class="text-2xl mb-1">${b.icon || '🏅'}</div>
+                <div class="font-semibold text-xs">${b.name}</div>
+                <div class="text-xs mt-0.5" style="color:#64748b">${b.description}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+  } catch(e) {
+    el.innerHTML = errorBox(e.message);
+  }
+}
+
+// ============================================================
+// EXAMS COUNTDOWN
+// ============================================================
+async function loadExams() {
+  const el = document.getElementById('exams-content');
+  el.innerHTML = skeletonGrid(3, 100);
+  try {
+    const data = await apiFetch('/exams');
+    const exams = data.exams || [];
+    if (!exams.length) { el.innerHTML = '<div class="text-center py-16"><div class="text-5xl mb-3">⏰</div><p style="color:#64748b">No upcoming exams</p></div>'; return; }
+    el.innerHTML = `
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        ${exams.map(exam => {
+          const days = Math.max(0, Math.ceil((new Date(exam.exam_date) - new Date()) / 86400000));
+          const hours = Math.max(0, Math.ceil((new Date(exam.exam_date) - new Date()) / 3600000));
+          const isUrgent = days <= 7;
+          return `
+          <div class="card p-5">
+            <div class="flex items-center gap-2 mb-3">
+              ${isUrgent ? '<span class="badge-pill badge-red">🚨 Urgent</span>' : '<span class="badge-pill badge-blue">📅 Upcoming</span>'}
+              ${exam.branch_code ? `<span class="badge-pill badge-purple">${exam.branch_code}</span>` : '<span class="badge-pill badge-purple">All Branches</span>'}
+            </div>
+            <h3 class="font-bold mb-1">${exam.title}</h3>
+            ${exam.description ? `<p class="text-xs mb-3" style="color:#94a3b8">${exam.description}</p>` : ''}
+            <div class="exam-countdown-card mt-3">
+              <div class="text-xs mb-1" style="color:#94a3b8">Time Remaining</div>
+              <div class="flex gap-3 justify-center">
+                <div><div class="countdown-num">${days}</div><div class="text-xs" style="color:#94a3b8">days</div></div>
+                <div class="countdown-num" style="color:#64748b">:</div>
+                <div><div class="countdown-num">${hours % 24}</div><div class="text-xs" style="color:#94a3b8">hours</div></div>
+              </div>
+              <div class="text-xs mt-2" style="color:#94a3b8">📅 ${exam.exam_date}</div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    `;
+  } catch(e) {
+    el.innerHTML = errorBox(e.message);
+  }
+}
+
+// ============================================================
+// ANALYTICS
+// ============================================================
+async function loadAnalytics() {
+  const el = document.getElementById('analytics-content');
+  el.innerHTML = skeletonGrid(4, 120);
+  try {
+    const data = await apiFetch(currentUser.role === 'admin' ? '/analytics/admin' : '/analytics/student');
+    const isAdmin = currentUser.role === 'admin';
+
+    if (isAdmin) {
+      el.innerHTML = `
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div class="stat-card"><div class="text-2xl mb-1">👥</div><div class="text-2xl font-bold text-primary-400">${data.total_users || 0}</div><div class="text-xs" style="color:#64748b">Total Users</div></div>
+          <div class="stat-card"><div class="text-2xl mb-1">🎓</div><div class="text-2xl font-bold text-green-400">${data.total_students || 0}</div><div class="text-xs" style="color:#64748b">Students</div></div>
+          <div class="stat-card"><div class="text-2xl mb-1">📚</div><div class="text-2xl font-bold text-yellow-400">${data.total_resources || 0}</div><div class="text-xs" style="color:#64748b">Resources</div></div>
+          <div class="stat-card"><div class="text-2xl mb-1">🎯</div><div class="text-2xl font-bold text-orange-400">${data.total_quiz_attempts || 0}</div><div class="text-xs" style="color:#64748b">Quiz Attempts</div></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="card p-5">
+            <h3 class="font-bold mb-4">Platform Overview</h3>
+            <div class="space-y-3">
+              <div class="flex justify-between text-sm"><span style="color:#94a3b8">Total Downloads</span><span class="font-bold">${data.total_downloads || 0}</span></div>
+              <div class="flex justify-between text-sm"><span style="color:#94a3b8">Total Quizzes</span><span class="font-bold">${data.total_quizzes || 0}</span></div>
+              <div class="flex justify-between text-sm"><span style="color:#94a3b8">Total Branches</span><span class="font-bold">${data.total_branches || 0}</span></div>
+              <div class="flex justify-between text-sm"><span style="color:#94a3b8">Avg Quiz Score</span><span class="font-bold">${data.avg_quiz_score ? data.avg_quiz_score.toFixed(1) : 0}%</span></div>
+            </div>
+          </div>
+          <div class="card p-5">
+            <h3 class="font-bold mb-4">Recent Activity</h3>
+            <div class="text-center py-4" style="color:#64748b"><div class="text-3xl mb-2">📊</div><div class="text-sm">Activity tracking active</div></div>
+          </div>
+        </div>
+      `;
+    } else {
+      el.innerHTML = `
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div class="stat-card"><div class="text-2xl mb-1">🎯</div><div class="text-2xl font-bold text-primary-400">${data.quizzes_taken || 0}</div><div class="text-xs" style="color:#64748b">Quizzes Taken</div></div>
+          <div class="stat-card"><div class="text-2xl mb-1">📊</div><div class="text-2xl font-bold text-green-400">${data.avg_score ? data.avg_score.toFixed(0) : 0}%</div><div class="text-xs" style="color:#64748b">Avg Score</div></div>
+          <div class="stat-card"><div class="text-2xl mb-1">📥</div><div class="text-2xl font-bold text-yellow-400">${data.total_resources || 0}</div><div class="text-xs" style="color:#64748b">Resources Accessed</div></div>
+          <div class="stat-card"><div class="text-2xl mb-1">🏆</div><div class="text-2xl font-bold text-orange-400">${data.badges_earned || 0}</div><div class="text-xs" style="color:#64748b">Badges Earned</div></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="card p-5">
+            <h3 class="font-bold mb-4">📈 Quiz Performance</h3>
+            <canvas id="quiz-chart" height="200"></canvas>
+          </div>
+          <div class="card p-5">
+            <h3 class="font-bold mb-4">📚 Study Progress</h3>
+            <div class="space-y-3">
+              ${(data.subject_progress || []).map(s => `
+                <div>
+                  <div class="flex justify-between text-xs mb-1"><span>${s.name || 'Subject'}</span><span>${(s.completion||0).toFixed(0)}%</span></div>
+                  <div class="progress-bar"><div class="progress-fill" style="width:${s.completion||0}%"></div></div>
+                </div>
+              `).join('') || '<p class="text-sm text-center py-4" style="color:#64748b">No progress data yet</p>'}
+            </div>
+          </div>
+        </div>
+        ${(data.quiz_history || []).length > 0 ? `
+          <div class="card p-5 mt-6">
+            <h3 class="font-bold mb-4">📋 Recent Quiz History</h3>
+            <div class="space-y-2">
+              ${(data.quiz_history || []).map(a => `
+                <div class="flex items-center justify-between p-3 rounded-xl" style="background:rgba(99,102,241,.05)">
+                  <div>
+                    <div class="font-medium text-sm">${a.quiz_title || 'Quiz'}</div>
+                    <div class="text-xs" style="color:#64748b">${a.completed_at ? new Date(a.completed_at).toLocaleDateString() : ''}</div>
+                  </div>
+                  <div class="text-right">
+                    <div class="font-bold ${a.percentage >= 60 ? 'text-green-400' : 'text-red-400'}">${(a.percentage||0).toFixed(0)}%</div>
+                    <div class="text-xs" style="color:#64748b">${a.score}/${a.total_marks}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+      `;
+      // Draw chart
+      try {
+        const ctx = document.getElementById('quiz-chart')?.getContext('2d');
+        if (ctx && data.quiz_history && data.quiz_history.length) {
+          new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: (data.quiz_history || []).slice(0,8).map((_,i) => 'Quiz '+(i+1)),
+              datasets: [{
+                label: 'Score %',
+                data: (data.quiz_history || []).slice(0,8).map(a => a.percentage || 0),
+                borderColor: '#6366f1',
+                backgroundColor: 'rgba(99,102,241,.15)',
+                fill: true,
+                tension: 0.4,
+              }]
+            },
+            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { min: 0, max: 100, grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#64748b' } }, x: { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#64748b' } } } }
+          });
+        } else if (ctx) {
+          ctx.canvas.closest('.card').querySelector('canvas').insertAdjacentHTML('beforebegin', '<p class="text-sm text-center py-4" style="color:#64748b">Take some quizzes to see your progress chart!</p>');
+        }
+      } catch(e) {}
+    }
+  } catch(e) {
+    el.innerHTML = errorBox(e.message);
+  }
+}
+
+// ============================================================
+// PROFILE
+// ============================================================
+async function loadProfile() {
+  const el = document.getElementById('profile-content');
+  el.innerHTML = skeletonGrid(2, 120);
+  try {
+    const data = await apiFetch('/auth/me');
+    const u = data.user || currentUser;
+    el.innerHTML = `
+      <div class="max-w-2xl mx-auto">
+        <div class="card p-6 mb-6 text-center">
+          <div class="w-20 h-20 rounded-full mx-auto flex items-center justify-center text-3xl font-bold mb-3" style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff">${u.name[0]}</div>
+          <h2 class="text-xl font-bold">${u.name}</h2>
+          <p class="text-sm mt-1" style="color:#64748b">${u.email}</p>
+          <div class="flex justify-center gap-3 mt-3 flex-wrap">
+            <span class="badge-pill badge-purple">${u.branch || 'CSE'}</span>
+            <span class="badge-pill badge-blue">Semester ${u.semester || 1}</span>
+            <span class="badge-pill ${u.role==='admin'?'badge-yellow':'badge-green'}">${u.role}</span>
+          </div>
+          <div class="grid grid-cols-3 gap-4 mt-6">
+            <div class="stat-card text-center"><div class="text-xl font-bold text-yellow-400">⭐ ${u.points || 0}</div><div class="text-xs" style="color:#64748b">Points</div></div>
+            <div class="stat-card text-center"><div class="text-xl font-bold text-primary-400">Lv ${u.level || 1}</div><div class="text-xs" style="color:#64748b">Level</div></div>
+            <div class="stat-card text-center"><div class="text-xl font-bold text-orange-400">🔥 ${u.streak || 0}</div><div class="text-xs" style="color:#64748b">Streak</div></div>
+          </div>
+        </div>
+
+        <div class="card p-6">
+          <h3 class="font-bold mb-4">Edit Profile</h3>
+          <div class="space-y-4">
+            <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Full Name</label><input id="prof-name" type="text" class="input-field" value="${u.name}"></div>
+            <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Bio</label><textarea id="prof-bio" class="input-field" rows="3" placeholder="Tell something about yourself...">${u.bio || ''}</textarea></div>
+            <div class="grid grid-cols-2 gap-3">
+              <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Branch</label>
+                <select id="prof-branch" class="input-field">
+                  <option ${u.branch==='CSE'?'selected':''} value="CSE">CSE</option>
+                  <option ${u.branch==='ISE'?'selected':''} value="ISE">ISE</option>
+                  <option ${u.branch==='AIML'?'selected':''} value="AIML">AI&ML</option>
+                  <option ${u.branch==='ECE'?'selected':''} value="ECE">ECE</option>
+                  <option ${u.branch==='EEE'?'selected':''} value="EEE">EEE</option>
+                  <option ${u.branch==='ME'?'selected':''} value="ME">Mechanical</option>
+                  <option ${u.branch==='CV'?'selected':''} value="CV">Civil</option>
+                </select>
+              </div>
+              <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Semester</label>
+                <select id="prof-semester" class="input-field">
+                  ${[1,2,3,4,5,6,7,8].map(i => `<option ${u.semester==i?'selected':''} value="${i}">Sem ${i}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <button class="btn-primary w-full" onclick="saveProfile()"><i class="fas fa-save mr-1"></i>Save Changes</button>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch(e) {
+    el.innerHTML = errorBox(e.message);
+  }
+}
+
+async function saveProfile() {
+  try {
+    const data = await apiFetch('/users/profile', {
+      method: 'PUT',
+      body: JSON.stringify({
+        name: document.getElementById('prof-name').value.trim(),
+        bio: document.getElementById('prof-bio').value.trim(),
+        branch: document.getElementById('prof-branch').value,
+        semester: parseInt(document.getElementById('prof-semester').value),
+      })
+    });
+    currentUser = { ...currentUser, ...data.user };
+    updateSidebarUser();
+    showToast('Profile updated! ✅', 'success');
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+// ============================================================
+// ADMIN USERS
+// ============================================================
+async function loadAdminUsers() {
+  const el = document.getElementById('admin-users-content');
+  el.innerHTML = skeletonGrid(4, 60);
+  try {
+    const data = await apiFetch('/users');
+    const users = data.users || [];
+    el.innerHTML = `
+      <div class="card overflow-hidden">
+        <div class="p-4 border-b" style="border-color:rgba(255,255,255,.07)">
+          <span class="font-semibold">${users.length} Users</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr style="background:rgba(99,102,241,.08)">
+                <th class="p-3 text-left font-semibold" style="color:#94a3b8">Name</th>
+                <th class="p-3 text-left font-semibold" style="color:#94a3b8">Email</th>
+                <th class="p-3 text-left font-semibold" style="color:#94a3b8">Branch</th>
+                <th class="p-3 text-left font-semibold" style="color:#94a3b8">Role</th>
+                <th class="p-3 text-left font-semibold" style="color:#94a3b8">Points</th>
+                <th class="p-3 text-left font-semibold" style="color:#94a3b8">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${users.map(u => `
+                <tr class="border-t hover:bg-primary-500 hover:bg-opacity-5" style="border-color:rgba(255,255,255,.04)">
+                  <td class="p-3">
+                    <div class="flex items-center gap-2">
+                      <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff">${u.name[0]}</div>
+                      ${u.name}
+                    </div>
+                  </td>
+                  <td class="p-3" style="color:#94a3b8">${u.email}</td>
+                  <td class="p-3"><span class="badge-pill badge-blue">${u.branch || '-'}</span></td>
+                  <td class="p-3"><span class="badge-pill ${u.role==='admin'?'badge-yellow':'badge-green'}">${u.role}</span></td>
+                  <td class="p-3 font-bold text-yellow-400">⭐ ${u.points || 0}</td>
+                  <td class="p-3">
+                    <button class="btn-danger text-xs px-2 py-1" onclick="toggleUserStatus(${u.id},${u.is_active})">${u.is_active?'Deactivate':'Activate'}</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  } catch(e) {
+    el.innerHTML = errorBox(e.message);
+  }
+}
+
+async function toggleUserStatus(userId, isActive) {
+  try {
+    await apiFetch(`/users/${userId}/toggle`, { method: 'PATCH', body: JSON.stringify({ is_active: isActive ? 0 : 1 }) });
+    showToast('User status updated', 'success');
+    loadAdminUsers();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+// ============================================================
+// ANNOUNCEMENTS
+// ============================================================
+async function loadAnnouncements() {
+  const el = document.getElementById('announcements-content');
+  el.innerHTML = skeletonGrid(3, 80);
+  try {
+    const data = await apiFetch('/announcements');
+    const anns = data.announcements || [];
+    if (!anns.length) { el.innerHTML = '<div class="text-center py-16"><div class="text-5xl mb-3">📢</div><p style="color:#64748b">No announcements yet</p></div>'; return; }
+    el.innerHTML = anns.map(a => `
+      <div class="card p-5 mb-4">
+        <div class="flex items-start gap-3">
+          <div class="text-2xl">${a.type==='exam'?'📅':a.type==='placement'?'💼':a.type==='resource'?'📚':'📢'}</div>
+          <div class="flex-1">
+            <div class="flex items-center gap-2 mb-1 flex-wrap">
+              <h3 class="font-bold">${a.title}</h3>
+              <span class="badge-pill ${a.type==='exam'?'badge-red':a.type==='placement'?'badge-yellow':a.type==='resource'?'badge-blue':'badge-purple'}">${capitalizeFirst(a.type)}</span>
+            </div>
+            <p class="text-sm" style="color:#94a3b8">${a.content}</p>
+            <div class="text-xs mt-2" style="color:#64748b">${timeAgo(a.created_at)}</div>
+          </div>
+          ${currentUser?.role === 'admin' ? `<button class="btn-danger text-xs px-2 py-1" onclick="deleteAnnouncement(${a.id})"><i class="fas fa-trash"></i></button>` : ''}
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {
+    el.innerHTML = errorBox(e.message);
+  }
+}
+
+function showAddAnnouncementModal() { document.getElementById('announcement-modal').style.display = 'flex'; }
+
+async function submitAnnouncement() {
+  const title = document.getElementById('ann-title').value.trim();
+  const content = document.getElementById('ann-content').value.trim();
+  if (!title || !content) return showToast('Title and content are required', 'error');
+  try {
+    await apiFetch('/announcements', {
+      method: 'POST',
+      body: JSON.stringify({ title, content, type: document.getElementById('ann-type').value })
+    });
+    closeModal('announcement-modal');
+    showToast('Announcement posted! 📢', 'success');
+    loadAnnouncements();
+  } catch(e) { showToast(e.message, 'error'); }
 }
 
 async function deleteAnnouncement(id) {
   if (!confirm('Delete announcement?')) return;
-  try { await api(`/api/announcements/${id}`, { method: 'DELETE' }); toast('Deleted', 'info'); navigate('admin-announcements'); }
-  catch(e) { toast(e.message, 'error'); }
-}
-
-// ===== ADMIN EXAMS =====
-async function renderAdminExams() {
-  const data = await api('/api/exams');
-  const exams = data.exams || [];
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <div class="flex items-center justify-between mb-6">
-        <div><h2 class="text-2xl font-black gradient-text">Exam Countdowns</h2></div>
-        <button onclick="document.getElementById('add-exam').style.display='block'" class="btn-primary"><i class="fas fa-plus mr-2"></i>Add Exam</button>
-      </div>
-      <div id="add-exam" style="display:none" class="card p-5 mb-6">
-        <form onsubmit="createExam(event)">
-          <div class="grid grid-cols-2 gap-3 mb-3">
-            <div class="col-span-2"><input type="text" id="exam-title" class="input-field" placeholder="Exam title" required></div>
-            <div><input type="date" id="exam-date" class="input-field" required></div>
-            <div><select id="exam-branch" class="input-field"><option value="">All Branches</option><option value="CSE">CSE</option><option value="ECE">ECE</option></select></div>
-            <div class="col-span-2"><textarea id="exam-desc" class="input-field" rows="2" placeholder="Description"></textarea></div>
-          </div>
-          <div class="flex gap-3">
-            <button type="submit" class="btn-primary flex-1">Create</button>
-            <button type="button" onclick="document.getElementById('add-exam').style.display='none'" class="btn-secondary flex-1">Cancel</button>
-          </div>
-        </form>
-      </div>
-      <div class="space-y-3">
-        ${exams.map(ex => `<div class="card p-4 flex items-center justify-between">
-          <div><div class="font-semibold" style="color:#e2e8f0">${ex.title}</div><div style="font-size:12px;color:#64748b">${ex.exam_date} • ${ex.days_left} days left</div></div>
-          <button onclick="deleteExam(${ex.id})" style="background:none;border:none;cursor:pointer;color:#ef4444"><i class="fas fa-trash"></i></button>
-        </div>`).join('')}
-      </div>
-    </div>
-  `;
-}
-
-async function createExam(e) {
-  e.preventDefault();
   try {
-    await api('/api/exams', { method: 'POST', body: JSON.stringify({ title: document.getElementById('exam-title').value, exam_date: document.getElementById('exam-date').value, branch_code: document.getElementById('exam-branch').value || null, description: document.getElementById('exam-desc').value }) });
-    toast('Exam countdown created! ⏰', 'success');
-    navigate('admin-exams');
-  } catch(e) { toast(e.message, 'error'); }
+    await apiFetch(`/announcements/${id}`, { method: 'DELETE' });
+    showToast('Deleted', 'info');
+    loadAnnouncements();
+  } catch(e) { showToast(e.message, 'error'); }
 }
 
-async function deleteExam(id) {
-  if (!confirm('Delete?')) return;
-  try { await api(`/api/exams/${id}`, { method: 'DELETE' }); navigate('admin-exams'); }
-  catch(e) { toast(e.message, 'error'); }
-}
-
-// ===== ADMIN PLACEMENT =====
-async function renderAdminPlacement() {
-  const data = await api('/api/placement/questions?limit=30');
-  const questions = data.questions || [];
-  document.getElementById('page-content').innerHTML = `
-    <div>
-      <div class="flex items-center justify-between mb-6">
-        <div><h2 class="text-2xl font-black gradient-text">Placement Questions</h2><p style="color:#64748b">${questions.length} questions</p></div>
-        <button onclick="document.getElementById('add-pq').style.display='block'" class="btn-primary"><i class="fas fa-plus mr-2"></i>Add Question</button>
-      </div>
-      <div id="add-pq" style="display:none" class="card p-5 mb-6">
-        <form onsubmit="addPlacementQ(event)">
-          <div class="grid grid-cols-2 gap-3 mb-3">
-            <div class="col-span-2"><textarea id="pq-question" class="input-field" rows="2" placeholder="Question" required></textarea></div>
-            <div class="col-span-2"><textarea id="pq-answer" class="input-field" rows="2" placeholder="Answer"></textarea></div>
-            <div><select id="pq-category" class="input-field"><option value="aptitude">Aptitude</option><option value="coding">Coding</option><option value="technical">Technical</option><option value="hr">HR</option></select></div>
-            <div><input type="text" id="pq-company" class="input-field" placeholder="Company (optional)"></div>
-            <div><select id="pq-difficulty" class="input-field"><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></div>
-          </div>
-          <div class="flex gap-3"><button type="submit" class="btn-primary flex-1">Add</button><button type="button" onclick="document.getElementById('add-pq').style.display='none'" class="btn-secondary flex-1">Cancel</button></div>
-        </form>
-      </div>
-      <div class="space-y-3">
-        ${questions.map(q => `<div class="card p-4">
-          <div class="flex items-start justify-between gap-3">
+// ============================================================
+// DAILY CHALLENGE
+// ============================================================
+async function loadDailyChallenge() {
+  const el = document.getElementById('challenge-content');
+  el.innerHTML = skeletonGrid(2, 120);
+  try {
+    const data = await apiFetch('/challenge/today');
+    const challenge = data.challenge;
+    if (!challenge) {
+      el.innerHTML = `<div class="text-center py-16 card p-10"><div class="text-5xl mb-3">🔥</div><p class="font-semibold mb-2">No Challenge Today</p><p class="text-sm" style="color:#64748b">Check back tomorrow for a new challenge!</p></div>`;
+      return;
+    }
+    const content = typeof challenge.content === 'string' ? JSON.parse(challenge.content) : challenge.content;
+    el.innerHTML = `
+      <div class="max-w-2xl mx-auto">
+        <div class="card p-6 mb-5" style="background:linear-gradient(135deg,#1e1e3f,#2d1b69)">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="text-4xl">🔥</span>
             <div>
-              <div style="font-size:13px;color:#e2e8f0;margin-bottom:4px">${q.question}</div>
-              <div class="flex gap-2"><span class="badge badge-primary" style="font-size:10px">${q.category}</span>${q.company?`<span class="badge badge-purple" style="font-size:10px">${q.company}</span>`:''}<span class="badge" style="font-size:10px;color:#64748b">${q.difficulty}</span></div>
+              <h2 class="text-xl font-bold text-white">${challenge.title}</h2>
+              <p style="color:#a5b4fc">Reward: +${challenge.points_reward} points</p>
             </div>
           </div>
-        </div>`).join('')}
+          <span class="badge-pill badge-yellow">${challenge.type === 'mcq' ? '🧠 MCQ Challenge' : '💻 Coding Challenge'}</span>
+        </div>
+
+        <div class="card p-6" id="challenge-question-box">
+          <h3 class="font-semibold text-base mb-5">${content.question}</h3>
+          <div>
+            ${(content.options || []).map((opt, i) => `
+              <div class="quiz-option" id="chall-opt-${i}" onclick="selectChallengeAnswer(${i}, this, ${content.correct}, '${escHtml(content.explanation || '')}')">
+                <span class="font-bold mr-2 text-primary-400">${String.fromCharCode(65+i)}.</span>${opt}
+              </div>
+            `).join('')}
+          </div>
+          <div id="challenge-explanation" style="display:none" class="mt-4 p-4 rounded-xl" style="background:rgba(99,102,241,.1)"></div>
+        </div>
       </div>
-    </div>
-  `;
-}
-
-async function addPlacementQ(e) {
-  e.preventDefault();
-  try {
-    await api('/api/placement/questions', { method: 'POST', body: JSON.stringify({ question: document.getElementById('pq-question').value, answer: document.getElementById('pq-answer').value, category: document.getElementById('pq-category').value, company: document.getElementById('pq-company').value || null, difficulty: document.getElementById('pq-difficulty').value }) });
-    toast('Question added!', 'success');
-    navigate('admin-placement');
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-// ===== HELPERS =====
-function getGreeting() {
-  const h = new Date().getHours();
-  return h < 12 ? 'Good Morning' : h < 17 ? 'Good Afternoon' : 'Good Evening';
-}
-
-// ===== NOTIFICATION TOGGLE =====
-document.addEventListener('click', function(e) {
-  const btn = e.target.closest('[onclick="navigate(\'notifications\')"]');
-  if (btn) {
-    e.preventDefault();
-    showNotifications();
+    `;
+  } catch(e) {
+    el.innerHTML = errorBox(e.message);
   }
-});
+}
 
-// ===== PWA =====
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredInstallPrompt = e;
-  document.getElementById('install-prompt').style.display = 'block';
-  document.getElementById('install-btn').addEventListener('click', () => {
-    deferredInstallPrompt.prompt();
-    deferredInstallPrompt.userChoice.then(() => { document.getElementById('install-prompt').style.display = 'none'; });
-  });
-});
-
-// ===== INITIALIZE =====
-document.addEventListener('DOMContentLoaded', async () => {
-  // Apply saved theme
-  const savedTheme = localStorage.getItem('vtu_theme') || 'dark';
-  document.documentElement.setAttribute('data-theme', savedTheme);
-  document.getElementById('theme-icon').className = savedTheme === 'dark' ? 'fas fa-moon w-5' : 'fas fa-sun w-5';
-
-  // Branch tags on landing
-  const tags = document.getElementById('branch-tags');
-  if (tags) {
-    const branches = ['💻 CSE','🖥️ ISE','🤖 AI & ML','📊 Data Science','🔒 Cyber Security','📡 ECE','⚡ EEE','🔬 EIE','⚙️ Mechanical','🏗️ Civil','🧪 Chemical','📈 IEM','✈️ Aeronautical','🚀 Aerospace','🚗 Automobile','🧬 Biotechnology','🏥 Biomedical','🌿 Environmental','🦾 Robotics','🏛️ B.Arch'];
-    tags.innerHTML = branches.map(b => `<span class="badge badge-primary" style="font-size:12px;padding:6px 14px">${b}</span>`).join('');
+function selectChallengeAnswer(idx, el, correct, explanation) {
+  // Disable all options
+  document.querySelectorAll('.quiz-option').forEach(o => o.style.pointerEvents = 'none');
+  if (idx === correct) {
+    el.classList.add('correct');
+    showToast('🎉 Correct! +Points earned!', 'success');
+  } else {
+    el.classList.add('wrong');
+    const correctEl = document.getElementById('chall-opt-'+correct);
+    if (correctEl) correctEl.classList.add('correct');
+    showToast('❌ Wrong answer!', 'error');
   }
+  const expEl = document.getElementById('challenge-explanation');
+  if (expEl && explanation) {
+    expEl.style.display = 'block';
+    expEl.style.background = 'rgba(99,102,241,.1)';
+    expEl.innerHTML = `<p class="text-sm" style="color:#a5b4fc">💡 <strong>Explanation:</strong> ${explanation}</p>`;
+  }
+  // Submit to backend
+  apiFetch('/challenge/complete', { method: 'POST', body: JSON.stringify({ answer_index: idx }) }).catch(() => {});
+}
 
-  // Check for saved token
-  const token = localStorage.getItem('vtu_token');
-  if (token) {
+// ============================================================
+// GLOBAL SEARCH
+// ============================================================
+let searchTimeout;
+async function globalSearch(q) {
+  clearTimeout(searchTimeout);
+  if (!q || q.length < 2) return;
+  searchTimeout = setTimeout(async () => {
     try {
-      const data = await api('/api/auth/me');
-      currentUser = data.user;
-      document.getElementById('app').style.display = 'block';
-      initApp();
-      return;
-    } catch {
-      localStorage.removeItem('vtu_token');
-    }
+      const data = await apiFetch(`/resources?search=${encodeURIComponent(q)}&limit=5`);
+      // Could show a dropdown here, for now just filter resources
+    } catch(e) {}
+  }, 300);
+}
+
+// ============================================================
+// THEME
+// ============================================================
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  localStorage.setItem('vtu_theme', isDark ? 'light' : 'dark');
+}
+
+// Apply saved theme
+const savedTheme = localStorage.getItem('vtu_theme') || 'dark';
+document.documentElement.setAttribute('data-theme', savedTheme);
+
+// ============================================================
+// MODAL HELPERS
+// ============================================================
+function closeModal(id) {
+  document.getElementById(id).style.display = 'none';
+}
+
+// Close modals on overlay click
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('modal-overlay')) {
+    e.target.style.display = 'none';
   }
-  document.getElementById('app').style.display = 'block';
-  showPage('landing-page');
 });
 
-// Register Service Worker
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
-  });
+// ============================================================
+// TOAST NOTIFICATIONS
+// ============================================================
+function showToast(msg, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  const icons = { success: 'fa-check-circle', error: 'fa-times-circle', info: 'fa-info-circle' };
+  toast.innerHTML = `<i class="fas ${icons[type]||'fa-info-circle'}"></i><span>${msg}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateX(100%)'; toast.style.transition = 'all .3s'; setTimeout(() => toast.remove(), 300); }, 3000);
+}
+
+// ============================================================
+// UTILITY HELPERS
+// ============================================================
+function resourceIcon(type) {
+  const icons = { notes: '📝', syllabus: '📋', textbook: '📚', question_paper: '❓', lab_manual: '🔬', video: '🎥', link: '🔗' };
+  return icons[type] || '📄';
+}
+
+function capitalizeFirst(str) {
+  if (!str) return '';
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function escHtml(str) {
+  return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+function timeAgo(dateStr) {
+  if (!dateStr) return '';
+  const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+  if (diff < 60) return 'Just now';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  return Math.floor(diff/86400) + 'd ago';
+}
+
+function skeletonGrid(count, height) {
+  return `<div class="grid grid-cols-1 md:grid-cols-${count > 3 ? 3 : count} gap-4">
+    ${Array(count).fill(`<div class="skeleton rounded-2xl" style="height:${height}px"></div>`).join('')}
+  </div>`;
+}
+
+function errorBox(msg) {
+  return `<div class="card p-8 text-center"><div class="text-4xl mb-3">⚠️</div><p class="font-semibold">Something went wrong</p><p class="text-sm mt-1" style="color:#64748b">${msg}</p><p class="text-xs mt-3" style="color:#475569">Make sure the database is initialized: npm run db:reset</p></div>`;
 }
