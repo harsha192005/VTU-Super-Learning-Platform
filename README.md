@@ -4,6 +4,10 @@ An AI-assisted learning platform for VTU students, built as a Cloudflare Pages a
 
 The app includes student and admin workflows for branches, subjects, resources, quizzes, AI study help, placement preparation, daily challenges, study planning, announcements, notifications, analytics, gamification, and exam countdowns.
 
+## Published App
+
+Live site: https://e878d8aa.vtu-super-learning-platform.pages.dev
+
 ## Tech Stack
 
 - Vite 6
@@ -224,4 +228,3 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 - Confirm the D1 database id in `wrangler.jsonc`.
 - Run `npm run build` before deploying.
 - Review CORS settings in `src/index.tsx` before public release.
-
