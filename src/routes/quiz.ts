@@ -4,19 +4,22 @@ import { verifyJWT } from '../middleware/auth'
 type Bindings = { DB: D1Database }
 const quiz = new Hono<{ Bindings: Bindings }>()
 
+// GET /quiz — list quizzes
 quiz.get('/', async (c) => {
   try {
-    const { branch, semester, limit = '20' } = c.req.query()
+    const { branch, semester, limit = '20', subject_id } = c.req.query()
     let q = `SELECT q.*, s.name as subject_name FROM quizzes q LEFT JOIN subjects s ON q.subject_id = s.id WHERE q.is_active = 1`
     const params: any[] = []
     if (branch) { q += ` AND q.branch_code = ?`; params.push(branch) }
     if (semester) { q += ` AND q.semester = ?`; params.push(parseInt(semester)) }
+    if (subject_id) { q += ` AND q.subject_id = ?`; params.push(parseInt(subject_id)) }
     q += ` ORDER BY q.created_at DESC LIMIT ?`; params.push(parseInt(limit))
     const { results } = await c.env.DB.prepare(q).bind(...params).all()
     return c.json({ quizzes: results })
   } catch (e: any) { return c.json({ error: e.message }, 500) }
 })
 
+// GET /quiz/:id — get quiz with questions
 quiz.get('/:id', async (c) => {
   try {
     const id = c.req.param('id')
@@ -27,6 +30,7 @@ quiz.get('/:id', async (c) => {
   } catch (e: any) { return c.json({ error: e.message }, 500) }
 })
 
+// POST /quiz — create quiz (admin)
 quiz.post('/', async (c) => {
   const auth = c.req.header('Authorization')
   if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401)
@@ -43,6 +47,73 @@ quiz.post('/', async (c) => {
   } catch (e: any) { return c.json({ error: e.message }, 500) }
 })
 
+// DELETE /quiz/:id (admin)
+quiz.delete('/:id', async (c) => {
+  const auth = c.req.header('Authorization')
+  if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401)
+  try {
+    const user = await verifyJWT(auth.slice(7))
+    if (user.role !== 'admin') return c.json({ error: 'Admin only' }, 403)
+    await c.env.DB.prepare(`UPDATE quizzes SET is_active = 0 WHERE id = ?`).bind(c.req.param('id')).run()
+    return c.json({ success: true })
+  } catch (e: any) { return c.json({ error: e.message }, 500) }
+})
+
+// GET /quiz/:id/questions — list questions for admin
+quiz.get('/:id/questions', async (c) => {
+  const auth = c.req.header('Authorization')
+  if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401)
+  try {
+    const user = await verifyJWT(auth.slice(7))
+    if (user.role !== 'admin') return c.json({ error: 'Admin only' }, 403)
+    const id = c.req.param('id')
+    const quizData = await c.env.DB.prepare(`SELECT * FROM quizzes WHERE id = ?`).bind(id).first<any>()
+    if (!quizData) return c.json({ error: 'Quiz not found' }, 404)
+    const { results } = await c.env.DB.prepare(`SELECT * FROM quiz_questions WHERE quiz_id = ? ORDER BY id`).bind(id).all()
+    return c.json({ quiz: quizData, questions: results })
+  } catch (e: any) { return c.json({ error: e.message }, 500) }
+})
+
+// POST /quiz/:id/questions — add question (admin)
+quiz.post('/:id/questions', async (c) => {
+  const auth = c.req.header('Authorization')
+  if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401)
+  try {
+    const user = await verifyJWT(auth.slice(7))
+    if (user.role !== 'admin') return c.json({ error: 'Admin only' }, 403)
+    const id = c.req.param('id')
+    const body = await c.req.json()
+    const { question, option_a, option_b, option_c, option_d, correct_answer, explanation, marks } = body
+    if (!question || !option_a || !option_b || !option_c || !option_d || !correct_answer) {
+      return c.json({ error: 'All fields required' }, 400)
+    }
+    const result = await c.env.DB.prepare(
+      `INSERT INTO quiz_questions (quiz_id, question, option_a, option_b, option_c, option_d, correct_answer, explanation, marks) VALUES (?,?,?,?,?,?,?,?,?) RETURNING *`
+    ).bind(id, question, option_a, option_b, option_c, option_d, correct_answer.toLowerCase(), explanation || null, marks || 1).first()
+    // Update total_questions count
+    await c.env.DB.prepare(`UPDATE quizzes SET total_questions = (SELECT COUNT(*) FROM quiz_questions WHERE quiz_id = ?) WHERE id = ?`).bind(id, id).run()
+    return c.json({ success: true, question: result }, 201)
+  } catch (e: any) { return c.json({ error: e.message }, 500) }
+})
+
+// DELETE /quiz/questions/:qid — delete question (admin)
+quiz.delete('/questions/:qid', async (c) => {
+  const auth = c.req.header('Authorization')
+  if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401)
+  try {
+    const user = await verifyJWT(auth.slice(7))
+    if (user.role !== 'admin') return c.json({ error: 'Admin only' }, 403)
+    const qid = c.req.param('qid')
+    const qData = await c.env.DB.prepare(`SELECT quiz_id FROM quiz_questions WHERE id = ?`).bind(qid).first<any>()
+    await c.env.DB.prepare(`DELETE FROM quiz_questions WHERE id = ?`).bind(qid).run()
+    if (qData) {
+      await c.env.DB.prepare(`UPDATE quizzes SET total_questions = (SELECT COUNT(*) FROM quiz_questions WHERE quiz_id = ?) WHERE id = ?`).bind(qData.quiz_id, qData.quiz_id).run()
+    }
+    return c.json({ success: true })
+  } catch (e: any) { return c.json({ error: e.message }, 500) }
+})
+
+// POST /quiz/:id/submit
 quiz.post('/:id/submit', async (c) => {
   const auth = c.req.header('Authorization')
   if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401)
@@ -55,7 +126,6 @@ quiz.post('/:id/submit', async (c) => {
     if (!quizData) return c.json({ error: 'Quiz not found' }, 404)
 
     const { results: questions } = await c.env.DB.prepare(`SELECT * FROM quiz_questions WHERE quiz_id = ? ORDER BY id`).bind(id).all<any>()
-
     let score = 0
     const totalMarks = questions.length
     const detailedQ = questions.map((q: any, i: number) => {
@@ -72,24 +142,23 @@ quiz.post('/:id/submit', async (c) => {
       `INSERT INTO quiz_attempts (user_id, quiz_id, score, total_marks, percentage, time_taken, status, completed_at, answers) VALUES (?,?,?,?,?,?,?,CURRENT_TIMESTAMP,?) RETURNING *`
     ).bind(user.id, id, score, totalMarks, percentage, time_taken || 0, 'completed', JSON.stringify(answers)).first()
 
-    // Award points
     await c.env.DB.prepare(`UPDATE users SET points = points + ? WHERE id = ?`).bind(pointsEarned, user.id).run()
-
-    // Notification
-    await c.env.DB.prepare(`INSERT INTO notifications (user_id, title, message, type) VALUES (?, 'Quiz Result 🎯', ?, 'quiz')`)
-      .bind(user.id, `${quizData.title}: You scored ${percentage.toFixed(1)}% (${score}/${totalMarks})`).run()
+    await c.env.DB.prepare(
+      `INSERT INTO notifications (user_id, title, message, type) VALUES (?, 'Quiz Result 🎯', ?, 'quiz')`
+    ).bind(user.id, `${quizData.title}: You scored ${percentage.toFixed(1)}% (${score}/${totalMarks}) and earned +${pointsEarned} pts!`).run()
 
     return c.json({ success: true, attempt: { ...attempt, points_earned: pointsEarned }, questions: detailedQ })
   } catch (e: any) { return c.json({ error: e.message }, 500) }
 })
 
+// GET /quiz/history/me
 quiz.get('/history/me', async (c) => {
   const auth = c.req.header('Authorization')
   if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401)
   try {
     const user = await verifyJWT(auth.slice(7))
     const { results } = await c.env.DB.prepare(
-      `SELECT qa.*, q.title as quiz_title FROM quiz_attempts qa JOIN quizzes q ON qa.quiz_id = q.id WHERE qa.user_id = ? ORDER BY qa.completed_at DESC LIMIT 20`
+      `SELECT qa.*, q.title as quiz_title, q.difficulty FROM quiz_attempts qa JOIN quizzes q ON qa.quiz_id = q.id WHERE qa.user_id = ? ORDER BY qa.completed_at DESC LIMIT 20`
     ).bind(user.id).all()
     return c.json({ history: results })
   } catch (e: any) { return c.json({ error: e.message }, 500) }

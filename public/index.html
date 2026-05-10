@@ -52,10 +52,13 @@
     [data-theme="dark"]  .input-field{background:#18181f;border:1px solid rgba(255,255,255,.1);color:#e2e8f0}
     [data-theme="light"] .input-field{background:#f8fafc;border:1px solid rgba(0,0,0,.15);color:#1e293b}
     .input-field:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.15)}
-    .sidebar{width:260px;min-height:100vh;position:fixed;left:0;top:0;z-index:40;transition:transform .3s}
+    .sidebar{width:260px;height:100vh;position:fixed;left:0;top:0;z-index:40;transition:transform .3s;display:flex;flex-direction:column;overflow:hidden}
     [data-theme="dark"]  .sidebar{background:#0d0d14;border-right:1px solid rgba(255,255,255,.06)}
     [data-theme="light"] .sidebar{background:#fff;border-right:1px solid rgba(0,0,0,.08)}
     .sidebar.collapsed{transform:translateX(-260px)}
+    #nav-menu{flex:1;overflow-y:auto;overflow-x:hidden;padding:4px 0 12px;min-height:0}
+    #nav-menu::-webkit-scrollbar{width:4px}
+    #nav-menu::-webkit-scrollbar-thumb{background:rgba(99,102,241,.55);border-radius:999px}
     .main-content{margin-left:260px;transition:margin .3s;min-height:100vh;padding:24px}
     .main-content.expanded{margin-left:0}
     .nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:10px;cursor:pointer;transition:all .2s;margin:2px 8px;font-size:.88rem;font-weight:500}
@@ -180,10 +183,6 @@
               </div>
             </div>
             <button class="btn-primary w-full py-3" onclick="doLogin()"><i class="fas fa-sign-in-alt mr-2"></i>Login</button>
-            <div class="grid grid-cols-2 gap-3 mt-2">
-              <button class="btn-secondary py-2" onclick="demoLogin('student')"><i class="fas fa-user-graduate mr-1"></i>Demo Student</button>
-              <button class="btn-secondary py-2" onclick="demoLogin('admin')"><i class="fas fa-user-shield mr-1"></i>Demo Admin</button>
-            </div>
           </div>
         </div>
 
@@ -224,7 +223,7 @@
             <button class="btn-primary w-full py-3" onclick="doRegister()"><i class="fas fa-user-plus mr-2"></i>Create Account</button>
           </div>
         </div>
-        <p class="text-center text-xs mt-4" style="color:#475569">Demo: student@vtu.ac.in / Admin@123</p>
+        <p class="text-center text-xs mt-4" style="color:#475569">Use your registered account credentials to continue</p>
       </div>
     </div>
   </div>
@@ -259,7 +258,7 @@
         Complete learning platform for all VTU branches. AI chat, smart quizzes, PDF resources, placement prep, gamification and more.
       </p>
       <div class="flex flex-wrap gap-4 justify-center mb-12">
-        <button class="btn-primary px-8 py-4 text-base" onclick="demoLogin('student')"><i class="fas fa-play mr-2"></i>Try as Student</button>
+        <button class="btn-primary px-8 py-4 text-base" onclick="showAuth('register')"><i class="fas fa-user-plus mr-2"></i>Get Started</button>
         <button class="btn-secondary px-8 py-4 text-base" onclick="showAuth('login')"><i class="fas fa-sign-in-alt mr-2"></i>Login</button>
       </div>
       <!-- Stats -->
@@ -317,6 +316,7 @@
 
   <footer class="text-center py-10 border-t" style="border-color:rgba(255,255,255,.07);color:#475569">
     <p>© 2024 VTU Super Learning Platform · Built with ❤️ for VTU Students</p>
+    <p class="text-xs mt-2">Developer: harshavardan T</p>
   </footer>
 </div>
 
@@ -345,7 +345,7 @@
 
     <nav id="nav-menu" class="flex flex-col"></nav>
 
-    <div class="absolute bottom-0 left-0 right-0 p-4 border-t" style="border-color:rgba(255,255,255,.06)">
+    <div class="p-4 border-t flex-shrink-0" style="border-color:rgba(255,255,255,.06)">
       <button class="nav-item w-full" onclick="toggleTheme()"><i class="fas fa-moon w-5 text-center"></i>Toggle Theme</button>
       <button class="nav-item w-full" onclick="doLogout()"><i class="fas fa-sign-out-alt w-5 text-center"></i>Logout</button>
     </div>
@@ -389,6 +389,7 @@
           <h2 class="text-2xl font-bold">VTU Branches</h2>
           <div class="flex gap-2">
             <input id="branch-search" type="text" placeholder="Search branch..." class="input-field text-sm" style="width:200px" oninput="filterBranches(this.value)">
+            <button id="admin-add-branch-btn" class="btn-primary text-sm" onclick="showAddBranchModal()" style="display:none"><i class="fas fa-plus mr-1"></i>Add Branch</button>
           </div>
         </div>
         <div id="branches-content"></div>
@@ -405,6 +406,7 @@
               <option value="4">Sem 4</option><option value="5">Sem 5</option><option value="6">Sem 6</option>
               <option value="7">Sem 7</option><option value="8">Sem 8</option>
             </select>
+            <button id="admin-add-subject-btn" class="btn-primary text-sm" onclick="showAddSubjectModal()" style="display:none"><i class="fas fa-plus mr-1"></i>Add Subject</button>
           </div>
         </div>
         <div id="subjects-content"></div>
@@ -426,6 +428,12 @@
               <option value="1">Sem 1</option><option value="2">Sem 2</option><option value="3">Sem 3</option>
               <option value="4">Sem 4</option><option value="5">Sem 5</option><option value="6">Sem 6</option>
               <option value="7">Sem 7</option><option value="8">Sem 8</option>
+            </select>
+            <select id="res-scheme-filter" class="input-field text-sm" style="width:135px" onchange="loadResources()">
+              <option value="">All Schemes</option>
+              <option value="2021">2021 Scheme</option>
+              <option value="2022">2022 Scheme</option>
+              <option value="2025">2025 Scheme</option>
             </select>
             <input id="res-search" type="text" placeholder="Search resources..." class="input-field text-sm" style="width:190px" oninput="loadResources()">
             <button id="admin-upload-btn" class="btn-primary text-sm" onclick="showUploadModal()" style="display:none"><i class="fas fa-upload mr-1"></i>Upload</button>
@@ -596,6 +604,24 @@
         <div id="challenge-content"></div>
       </div>
 
+      <!-- ===== BOOKMARKS PAGE ===== -->
+      <div id="page-bookmarks" class="page">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-2xl font-bold">🔖 My Bookmarks</h2>
+          <span class="text-sm" style="color:#64748b">Resources you've saved</span>
+        </div>
+        <div id="bookmarks-content"></div>
+      </div>
+
+      <!-- ===== ADMIN: QUIZ MANAGER PAGE ===== -->
+      <div id="page-quiz-manager" class="page">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-2xl font-bold">⚙️ Quiz Manager</h2>
+          <button class="btn-primary" onclick="showCreateQuizModal()"><i class="fas fa-plus mr-1"></i>New Quiz</button>
+        </div>
+        <div id="quiz-manager-content"></div>
+      </div>
+
     </div><!-- /pages-container -->
   </div><!-- /main-content -->
 </div><!-- /app-screen -->
@@ -613,6 +639,10 @@
       <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Title *</label><input id="upload-title" type="text" class="input-field" placeholder="Resource title"></div>
       <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Description</label><textarea id="upload-desc" class="input-field" rows="2" placeholder="Short description"></textarea></div>
       <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Branch</label><select id="upload-branch" class="input-field" onchange="loadUploadSubjects()"></select></div>
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Subject</label><select id="upload-subject" class="input-field"><option value="">No subject</option></select></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
         <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Type *</label>
           <select id="upload-type" class="input-field">
             <option value="notes">Notes</option><option value="syllabus">Syllabus</option>
@@ -620,6 +650,15 @@
             <option value="lab_manual">Lab Manual</option><option value="video">Video Link</option>
           </select>
         </div>
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Scheme</label>
+          <select id="upload-scheme" class="input-field">
+            <option value="2021">2021 Scheme</option>
+            <option value="2022">2022 Scheme</option>
+            <option value="2025">2025 Scheme</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
         <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Semester</label>
           <select id="upload-semester" class="input-field">
             <option value="1">1</option><option value="2">2</option><option value="3">3</option>
@@ -627,13 +666,64 @@
             <option value="7">7</option><option value="8">8</option>
           </select>
         </div>
+        <div></div>
       </div>
-      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">File URL (PDF/Video link) *</label><input id="upload-url" type="url" class="input-field" placeholder="https://..."></div>
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">PDF File *</label><input id="upload-file" type="file" class="input-field" accept="application/pdf,.pdf"></div>
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Video/External Link</label><input id="upload-url" type="url" class="input-field" placeholder="https://..."></div>
       <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Tags (comma-separated)</label><input id="upload-tags" type="text" class="input-field" placeholder="arrays, sorting, algorithms"></div>
       <div class="flex items-center gap-2"><input id="upload-important" type="checkbox" class="w-4 h-4"><label class="text-sm" style="color:#94a3b8">Mark as Important</label></div>
       <div class="flex gap-3 pt-2">
         <button class="btn-secondary flex-1" onclick="closeModal('upload-modal')">Cancel</button>
         <button class="btn-primary flex-1" onclick="submitUpload()"><i class="fas fa-upload mr-1"></i>Upload</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Branch Modal -->
+<div id="branch-modal" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="flex items-center justify-between mb-5">
+      <h3 class="text-lg font-bold">Add Branch</h3>
+      <button onclick="closeModal('branch-modal')" style="color:#64748b"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="space-y-4">
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Code *</label><input id="branch-code" class="input-field" placeholder="CSE"></div>
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Icon</label><input id="branch-icon" class="input-field" value="🌿"></div>
+      </div>
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Name *</label><input id="branch-name" class="input-field" placeholder="Computer Science and Engineering"></div>
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Category *</label><input id="branch-category" class="input-field" placeholder="Computer Science"></div>
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Description</label><textarea id="branch-desc" class="input-field" rows="2"></textarea></div>
+      <div class="flex gap-3 pt-2">
+        <button class="btn-secondary flex-1" onclick="closeModal('branch-modal')">Cancel</button>
+        <button class="btn-primary flex-1" onclick="submitBranch()">Add Branch</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Subject Modal -->
+<div id="subject-modal" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="flex items-center justify-between mb-5">
+      <h3 class="text-lg font-bold">Add Subject</h3>
+      <button onclick="closeModal('subject-modal')" style="color:#64748b"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="space-y-4">
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Code *</label><input id="subject-code" class="input-field" placeholder="21CS51"></div>
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Branch *</label><select id="subject-branch" class="input-field"></select></div>
+      </div>
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Name *</label><input id="subject-name" class="input-field" placeholder="Database Management Systems"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Semester *</label><input id="subject-semester" type="number" min="1" max="8" value="1" class="input-field"></div>
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Credits</label><input id="subject-credits" type="number" min="1" max="10" value="4" class="input-field"></div>
+      </div>
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Description</label><textarea id="subject-desc" class="input-field" rows="2"></textarea></div>
+      <div class="flex gap-3 pt-2">
+        <button class="btn-secondary flex-1" onclick="closeModal('subject-modal')">Cancel</button>
+        <button class="btn-primary flex-1" onclick="submitSubject()">Add Subject</button>
       </div>
     </div>
   </div>
@@ -734,12 +824,93 @@
 
 <!-- Resource View Modal -->
 <div id="resource-modal" class="modal-overlay" style="display:none">
-  <div class="modal" style="max-width:700px">
+  <div class="modal" style="max-width:720px">
     <div class="flex items-center justify-between mb-4">
       <h3 id="res-modal-title" class="text-lg font-bold">Resource</h3>
-      <button onclick="closeModal('resource-modal')" style="color:#64748b"><i class="fas fa-times"></i></button>
+      <div class="flex gap-2">
+        <button onclick="closeModal('resource-modal')" style="color:#64748b;background:none;border:none;cursor:pointer;font-size:1.1rem"><i class="fas fa-times"></i></button>
+      </div>
     </div>
     <div id="res-modal-body"></div>
+  </div>
+</div>
+
+<!-- Add Question Modal -->
+<div id="add-question-modal" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:660px">
+    <div class="flex items-center justify-between mb-5">
+      <h3 class="text-lg font-bold">➕ Add Question</h3>
+      <button onclick="closeModal('add-question-modal')" style="color:#64748b;background:none;border:none;cursor:pointer"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="space-y-4">
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Question *</label><textarea id="qq-question" class="input-field" rows="3" placeholder="Enter your question here..."></textarea></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Option A *</label><input id="qq-a" type="text" class="input-field" placeholder="Option A"></div>
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Option B *</label><input id="qq-b" type="text" class="input-field" placeholder="Option B"></div>
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Option C *</label><input id="qq-c" type="text" class="input-field" placeholder="Option C"></div>
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Option D *</label><input id="qq-d" type="text" class="input-field" placeholder="Option D"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Correct Answer *</label>
+          <select id="qq-correct" class="input-field">
+            <option value="a">A</option><option value="b">B</option><option value="c">C</option><option value="d">D</option>
+          </select>
+        </div>
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Marks</label><input id="qq-marks" type="number" class="input-field" value="1" min="1" max="5"></div>
+      </div>
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Explanation</label><textarea id="qq-explanation" class="input-field" rows="2" placeholder="Why is this the correct answer?"></textarea></div>
+      <input type="hidden" id="qq-quiz-id">
+      <div class="flex gap-3 pt-2">
+        <button class="btn-secondary flex-1" onclick="closeModal('add-question-modal')">Cancel</button>
+        <button class="btn-primary flex-1" onclick="submitAddQuestion()"><i class="fas fa-plus mr-1"></i>Add Question</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Resource Modal -->
+<div id="edit-resource-modal" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="flex items-center justify-between mb-5">
+      <h3 class="text-lg font-bold">✏️ Edit Resource</h3>
+      <button onclick="closeModal('edit-resource-modal')" style="color:#64748b;background:none;border:none;cursor:pointer"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="space-y-4">
+      <input type="hidden" id="edit-res-id">
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Title *</label><input id="edit-res-title" type="text" class="input-field"></div>
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Description</label><textarea id="edit-res-desc" class="input-field" rows="2"></textarea></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Type</label>
+          <select id="edit-res-type" class="input-field">
+            <option value="notes">Notes</option><option value="syllabus">Syllabus</option>
+            <option value="textbook">Textbook</option><option value="question_paper">Question Paper</option>
+            <option value="lab_manual">Lab Manual</option><option value="video">Video Link</option>
+          </select>
+        </div>
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Scheme</label>
+          <select id="edit-res-scheme" class="input-field">
+            <option value="2021">2021 Scheme</option>
+            <option value="2022">2022 Scheme</option>
+            <option value="2025">2025 Scheme</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">Semester</label>
+          <select id="edit-res-semester" class="input-field">
+            <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+            <option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option>
+          </select>
+        </div>
+        <div></div>
+      </div>
+      <div><label class="block text-sm font-medium mb-1" style="color:#94a3b8">File URL *</label><input id="edit-res-url" type="url" class="input-field"></div>
+      <div class="flex items-center gap-2"><input id="edit-res-important" type="checkbox" class="w-4 h-4"><label class="text-sm" style="color:#94a3b8">Mark as Important</label></div>
+      <div class="flex gap-3 pt-2">
+        <button class="btn-secondary flex-1" onclick="closeModal('edit-resource-modal')">Cancel</button>
+        <button class="btn-primary flex-1" onclick="submitEditResource()"><i class="fas fa-save mr-1"></i>Save Changes</button>
+      </div>
+    </div>
   </div>
 </div>
 

@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { verifyJWT } from '../middleware/auth'
 
 type Bindings = { DB: D1Database }
 const branches = new Hono<{ Bindings: Bindings }>()
@@ -16,6 +17,31 @@ branches.get('/', async (c) => {
     return c.json({ branches: results, grouped })
   } catch (e: any) {
     return c.json({ error: e.message }, 500)
+  }
+})
+
+branches.post('/', async (c) => {
+  const auth = c.req.header('Authorization')
+  if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401)
+  try {
+    const user = await verifyJWT(auth.slice(7))
+    if (user.role !== 'admin') return c.json({ error: 'Admin only' }, 403)
+    const { code, name, category, description, icon, total_semesters } = await c.req.json()
+    if (!code || !name || !category) return c.json({ error: 'Code, name and category required' }, 400)
+    const result = await c.env.DB.prepare(
+      `INSERT INTO branches (code, name, category, description, icon, total_semesters) VALUES (?,?,?,?,?,?) RETURNING *`
+    ).bind(
+      String(code).trim().toUpperCase(),
+      String(name).trim(),
+      String(category).trim(),
+      description || null,
+      icon || '🌿',
+      total_semesters || 8
+    ).first()
+    return c.json({ success: true, branch: result }, 201)
+  } catch (e: any) {
+    const message = e.message?.includes('UNIQUE') ? 'Branch code already exists' : e.message
+    return c.json({ error: message }, 500)
   }
 })
 

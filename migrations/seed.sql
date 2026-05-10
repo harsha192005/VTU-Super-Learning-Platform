@@ -1,8 +1,8 @@
 -- VTU Super Learning Platform - Seed Data
 
--- Admin User (password: Admin@123)
+-- Admin User (password: Harsha#19)
 INSERT OR IGNORE INTO users (name, email, password_hash, role, branch, semester, points, level) VALUES
-('VTU Admin', 'admin@vtu.edu.in', '$2a$10$adminhashedpassword123456789', 'admin', 'CSE', 8, 9999, 10);
+('harshavardan T', 'harsha7411156@gmail.com', '5a4516772f66e18d01b05c9568f84ab94ba3c6de76289f5aa8070c7734555774', 'admin', 'CSE', 8, 9999, 10);
 
 -- Student Users (password: Student@123)
 INSERT OR IGNORE INTO users (name, email, password_hash, role, branch, semester, points, level, streak) VALUES

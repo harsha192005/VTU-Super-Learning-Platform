@@ -1,14 +1,22 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "vtu-super-learning-platform",
-  "compatibility_date": "2024-01-01",
-  "pages_build_output_dir": "./dist",
-  "compatibility_flags": ["nodejs_compat"],
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "vtu-platform-db",
-      "database_id": "local-vtu-platform-db"
-    }
-  ]
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "vtu-super-learning-platform",
+	"compatibility_date": "2024-01-01",
+	"pages_build_output_dir": "./dist",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "vtu-platform-db",
+      "database_id": "4aea14c4-4f94-44f4-8e13-0a03be4b80bf"
+		},
+		{
+			"binding": "vtu_platform_db",
+			"database_name": "vtu-platform-db",
+			"database_id": "4aea14c4-4f94-44f4-8e13-0a03be4b80bf",
+			"remote": true
+		}
+	]
 }

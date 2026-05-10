@@ -46,22 +46,6 @@ auth.post('/login', async (c) => {
   }
 })
 
-// Demo login for quick access
-auth.post('/demo-login', async (c) => {
-  try {
-    const { role } = await c.req.json()
-    const email = role === 'admin' ? 'admin@vtu.edu.in' : 'rahul@student.vtu.ac.in'
-    const user = await c.env.DB.prepare(
-      `SELECT id, name, email, role, branch, semester, points, level, streak, avatar FROM users WHERE email = ?`
-    ).bind(email).first<any>()
-    if (!user) return c.json({ error: 'Demo user not found. Please seed the database.' }, 404)
-    const token = await signJWT({ id: user.id, email: user.email, role: user.role, name: user.name }, 'vtu-super-platform-secret-2024')
-    return c.json({ success: true, token, user })
-  } catch (e: any) {
-    return c.json({ error: e.message || 'Demo login failed' }, 500)
-  }
-})
-
 auth.get('/me', async (c) => {
   const authHeader = c.req.header('Authorization')
   if (!authHeader?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401)
